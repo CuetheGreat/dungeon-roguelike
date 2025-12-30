@@ -86,7 +86,7 @@ export class Warlock extends Player {
                 name: 'Eldritch Blast',
                 description: 'Fire a beam of crackling energy, dealing magic damage.',
                 manaCost: 6,
-                cooldown: 1,
+                cooldown: 2,
                 currentCooldown: 0,
                 source: 'class',
                 targetType: 'enemy',
