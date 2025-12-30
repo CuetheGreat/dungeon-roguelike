@@ -136,8 +136,18 @@ export interface StatBonus {
     critMultiplier?: number;
 }
 
+/** How to interpret the damage value for granted abilities */
+export type GrantedAbilityDamageCalc = 'flat' | 'multiplier';
+
+/** How to interpret the healing value for granted abilities */
+export type GrantedAbilityHealingCalc = 'flat' | 'percent_max_hp';
+
+/** Who the granted ability targets */
+export type GrantedAbilityTarget = 'enemy' | 'self' | 'all_enemies';
+
 /**
  * Ability granted by an item when equipped.
+ * Uses standardized format matching the Ability interface.
  * @interface
  */
 export interface GrantedAbility {
@@ -153,15 +163,45 @@ export interface GrantedAbility {
     cooldown: number;
     /** Current cooldown remaining (0 = ready to use) */
     currentCooldown: number;
-    /** Damage dealt (if applicable) */
+    
+    // === Targeting ===
+    /** Who the ability targets (default: 'enemy') */
+    targetType?: GrantedAbilityTarget;
+    
+    // === Damage ===
+    /** Damage value */
     damage?: number;
-    /** Damage type (if applicable) */
+    /** How to calculate damage: 'flat' or 'multiplier' */
+    damageCalc?: GrantedAbilityDamageCalc;
+    /** Damage type (for display/resistance purposes) */
     damageType?: DamageType;
-    /** Healing provided (if applicable) */
+    /** Level scaling multiplier for flat damage */
+    levelScaling?: number;
+    
+    // === Healing ===
+    /** Healing value */
     healing?: number;
-    /** Special effect type */
+    /** How to calculate healing: 'flat' or 'percent_max_hp' */
+    healingCalc?: GrantedAbilityHealingCalc;
+    /** Percent of damage dealt to heal (lifesteal) */
+    lifestealPercent?: number;
+    
+    // === Status Effects ===
+    /** Status effect to apply to target */
+    statusEffect?: { type: string; duration: number; value?: number };
+    /** Status effect to apply to self */
+    selfBuff?: { type: string; duration: number; value?: number };
+    
+    // === Special Flags ===
+    /** Whether this is a full restore (health, mana, cooldowns) */
+    fullRestore?: boolean;
+    /** Whether this grants invulnerability */
+    invulnerable?: boolean;
+    
+    // === Legacy (for backwards compatibility) ===
+    /** @deprecated Use statusEffect or specific flags instead */
     effect?: string;
-    /** Whether this ability hits all enemies */
+    /** @deprecated Use targetType: 'all_enemies' instead */
     isAoe?: boolean;
 }
 

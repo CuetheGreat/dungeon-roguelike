@@ -88,8 +88,11 @@ export class Warlock extends Player {
                 manaCost: 6,
                 cooldown: 1,
                 currentCooldown: 0,
+                source: 'class',
+                targetType: 'enemy',
                 damage: 8,
-                source: 'class'
+                damageCalc: 'flat',
+                levelScaling: 1.0
             },
             {
                 id: 'drain_life',
@@ -98,9 +101,12 @@ export class Warlock extends Player {
                 manaCost: 15,
                 cooldown: 3,
                 currentCooldown: 0,
+                source: 'class',
+                targetType: 'enemy',
                 damage: 6,
-                effect: 'lifesteal',
-                source: 'class'
+                damageCalc: 'flat',
+                levelScaling: 0.8,
+                lifestealPercent: 40
             },
             {
                 id: 'hex',
@@ -109,8 +115,9 @@ export class Warlock extends Player {
                 manaCost: 12,
                 cooldown: 4,
                 currentCooldown: 0,
-                effect: 'debuff',
-                source: 'class'
+                source: 'class',
+                targetType: 'enemy',
+                statusEffect: { type: 'vulnerable', duration: 3, value: 20 }
             },
             {
                 id: 'shadow_bolt',
@@ -119,8 +126,13 @@ export class Warlock extends Player {
                 manaCost: 18,
                 cooldown: 2,
                 currentCooldown: 0,
+                source: 'class',
+                targetType: 'enemy',
                 damage: 12,
-                source: 'class'
+                damageCalc: 'flat',
+                levelScaling: 1.2,
+                consumesShards: true,
+                damagePerShard: 4
             },
             {
                 id: 'dark_pact',
@@ -129,8 +141,10 @@ export class Warlock extends Player {
                 manaCost: 0,
                 cooldown: 5,
                 currentCooldown: 0,
-                effect: 'mana_restore',
-                source: 'class'
+                source: 'class',
+                targetType: 'self',
+                resourceCost: { type: 'health', percent: 15 },
+                resourceGain: { type: 'mana', percent: 30 }
             },
             {
                 id: 'soul_harvest',
@@ -139,9 +153,14 @@ export class Warlock extends Player {
                 manaCost: 25,
                 cooldown: 6,
                 currentCooldown: 0,
-                damage: 10, // Per shard
-                effect: 'consume_shards',
-                source: 'class'
+                source: 'class',
+                targetType: 'enemy',
+                damage: 10,
+                damageCalc: 'flat',
+                levelScaling: 1.5,
+                consumesShards: true,
+                damagePerShard: 0, // Base damage IS per shard for this ability
+                effect: 'soul_harvest' // Special flag for "damage = base * shards"
             }
         ];
     }

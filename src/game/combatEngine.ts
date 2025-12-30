@@ -966,8 +966,8 @@ export class CombatEngine {
     }
 
     /**
-     * Execute a player ability against a target or all enemies.
-     * Handles damage abilities, healing abilities, buff abilities, and AOE abilities.
+     * Execute a player ability using the standardized ability format.
+     * This generic handler interprets ability properties to determine behavior.
      * 
      * @param abilityId - ID of the ability to use
      * @param targetId - ID of the target enemy (optional for self-targeting or AOE abilities)
@@ -1004,6 +1004,48 @@ export class CombatEngine {
             };
         }
 
+        // Check resource costs (e.g., health sacrifice)
+        if (ability.resourceCost) {
+            if (ability.resourceCost.type === 'health') {
+                const healthCost = ability.resourceCost.percent 
+                    ? Math.floor(this.player.stats.health * (ability.resourceCost.percent / 100))
+                    : (ability.resourceCost.flat ?? 0);
+                if (this.player.stats.health <= healthCost) {
+                    return {
+                        abilityName: ability.name,
+                        success: false,
+                        enemiesKilled: [],
+                        message: `Not enough health to use ${ability.name}!`
+                    };
+                }
+            }
+            if (ability.resourceCost.type === 'shards') {
+                const warlock = this.player as { soulShards?: number };
+                const shardCost = ability.resourceCost.flat ?? 1;
+                if (!warlock.soulShards || warlock.soulShards < shardCost) {
+                    return {
+                        abilityName: ability.name,
+                        success: false,
+                        enemiesKilled: [],
+                        message: `Not enough soul shards to use ${ability.name}!`
+                    };
+                }
+            }
+        }
+
+        // For Soul Harvest specifically, require at least 1 shard
+        if (ability.effect === 'soul_harvest') {
+            const warlock = this.player as { soulShards?: number };
+            if (!warlock.soulShards || warlock.soulShards === 0) {
+                return {
+                    abilityName: ability.name,
+                    success: false,
+                    enemiesKilled: [],
+                    message: `No soul shards to consume!`
+                };
+            }
+        }
+
         // Consume mana and set cooldown
         this.player.useMana(ability.manaCost);
         ability.currentCooldown = ability.cooldown;
@@ -1012,222 +1054,47 @@ export class CombatEngine {
         let totalDamage = 0;
         let totalHealing = 0;
         let message = '';
+        const targetType = ability.targetType ?? 'enemy';
 
-        // Handle healing abilities (self-targeting)
-        if (ability.healing) {
-            const healAmount = Math.floor(this.player.getMaxHealth() * ability.healing);
-            totalHealing = this.player.heal(healAmount);
-            message = `${this.player.name} uses ${ability.name} and heals for ${totalHealing} HP!`;
-            this.state.log.push(message);
-
-            return {
-                abilityName: ability.name,
-                success: true,
-                healing: totalHealing,
-                enemiesKilled: [],
-                message
-            };
+        // === STEP 1: Handle resource costs ===
+        if (ability.resourceCost) {
+            if (ability.resourceCost.type === 'health') {
+                const healthCost = ability.resourceCost.percent 
+                    ? Math.floor(this.player.stats.health * (ability.resourceCost.percent / 100))
+                    : (ability.resourceCost.flat ?? 0);
+                this.player.stats.health -= healthCost;
+                this.updateCombatantHealth(this.player.id, this.player.stats.health);
+                this.state.log.push(`${this.player.name} sacrifices ${healthCost} HP!`);
+            }
         }
 
-        // Handle buff abilities (self-targeting)
-        if (ability.effect === 'attack_buff') {
-            const attackBonus = Math.floor(this.player.stats.attack * 0.25);
-            this.player.applyBuff(ability.name, { attack: attackBonus }, 3);
-            message = `${this.player.name} uses ${ability.name}, increasing attack by ${attackBonus} for 3 turns!`;
-            this.state.log.push(message);
-
-            return {
-                abilityName: ability.name,
-                success: true,
-                effectApplied: 'attack_buff',
-                enemiesKilled: [],
-                message
-            };
+        // === STEP 2: Handle resource gains ===
+        if (ability.resourceGain) {
+            if (ability.resourceGain.type === 'mana') {
+                const manaGain = ability.resourceGain.percent 
+                    ? Math.floor(this.player.getMaxMana() * (ability.resourceGain.percent / 100))
+                    : (ability.resourceGain.flat ?? 0);
+                const actualGain = this.player.restoreMana(manaGain);
+                this.state.log.push(`${this.player.name} restores ${actualGain} mana!`);
+                message = `${this.player.name} uses ${ability.name}!`;
+            }
+            if (ability.resourceGain.type === 'health') {
+                const healthGain = ability.resourceGain.percent 
+                    ? Math.floor(this.player.getMaxHealth() * (ability.resourceGain.percent / 100))
+                    : (ability.resourceGain.flat ?? 0);
+                totalHealing = this.player.heal(healthGain);
+            }
         }
 
-        // Handle lifesteal abilities (Drain Life) - damage + heal for % of damage
-        if (ability.effect === 'lifesteal' && ability.damage && targetId) {
-            const target = this.enemies.find(e => e.id === targetId);
-            if (!target) {
-                return {
-                    abilityName: ability.name,
-                    success: false,
-                    enemiesKilled: [],
-                    message: 'Target not found'
-                };
-            }
-
-            // Calculate damage (use ability.damage as base, scale with level)
-            const baseDamage = ability.damage + Math.floor(this.player.level * 0.8);
-            const damageModifier = this.getDamageReceivedModifier(target.id);
-            totalDamage = Math.max(1, Math.floor(baseDamage * damageModifier));
-            
-            // Apply damage
-            target.health = Math.max(0, target.health - totalDamage);
-            this.updateCombatantHealth(target.id, target.health);
-            
-            // Heal for 40% of damage dealt
-            totalHealing = this.player.heal(Math.floor(totalDamage * 0.4));
-            
-            this.state.log.push(`${ability.name} drains ${target.name} for ${totalDamage} damage!`);
-            this.state.log.push(`${this.player.name} heals for ${totalHealing} HP!`);
-
-            if (target.health <= 0) {
-                enemiesKilled.push(target.id);
-                this.state.log.push(`${target.name} is defeated!`);
-                this.removeDeadEnemy(target.id);
-            }
-
-            message = `${this.player.name} uses ${ability.name}, dealing ${totalDamage} damage and healing for ${totalHealing}!`;
-            this.checkCombatEnd();
-
-            return {
-                abilityName: ability.name,
-                success: true,
-                damage: totalDamage,
-                healing: totalHealing,
-                effectApplied: 'lifesteal',
-                enemiesKilled,
-                message
-            };
-        }
-
-        // Handle debuff abilities (Hex) - apply vulnerability to enemy
-        if (ability.effect === 'debuff' && targetId) {
-            const target = this.enemies.find(e => e.id === targetId);
-            if (!target) {
-                return {
-                    abilityName: ability.name,
-                    success: false,
-                    enemiesKilled: [],
-                    message: 'Target not found'
-                };
-            }
-
-            // Apply vulnerability status effect (20% more damage taken for 3 turns)
-            this.applyStatusEffect(
-                target.id,
-                StatusEffectType.VULNERABLE,
-                3, // duration
-                ability.name,
-                this.player.level,
-                20 // 20% more damage taken
-            );
-            
-            message = `${this.player.name} uses ${ability.name} on ${target.name}! They take 20% more damage for 3 turns!`;
-            this.state.log.push(message);
-
-            return {
-                abilityName: ability.name,
-                success: true,
-                effectApplied: 'debuff',
-                enemiesKilled: [],
-                message
-            };
-        }
-
-        // Handle mana restore abilities (Dark Pact) - sacrifice HP for mana
-        if (ability.effect === 'mana_restore') {
-            const healthCost = Math.floor(this.player.stats.health * 0.15);
-            const manaRestore = Math.floor(this.player.getMaxMana() * 0.3);
-
-            // Can't kill yourself with this ability
-            if (this.player.stats.health <= healthCost) {
-                return {
-                    abilityName: ability.name,
-                    success: false,
-                    enemiesKilled: [],
-                    message: `Not enough health to use ${ability.name}!`
-                };
-            }
-
-            this.player.stats.health -= healthCost;
-            const actualManaRestored = this.player.restoreMana(manaRestore);
-            this.updateCombatantHealth(this.player.id, this.player.stats.health);
-
-            message = `${this.player.name} uses ${ability.name}, sacrificing ${healthCost} HP to restore ${actualManaRestored} mana!`;
-            this.state.log.push(message);
-
-            return {
-                abilityName: ability.name,
-                success: true,
-                damage: healthCost, // Self-damage
-                effectApplied: 'mana_restore',
-                enemiesKilled: [],
-                message
-            };
-        }
-
-        // Handle consume_shards abilities (Soul Harvest) - consume soul shards for damage
-        if (ability.effect === 'consume_shards') {
-            // Check if player is a Warlock with soul shards
-            const warlock = this.player as { soulShards?: number };
-            if (warlock.soulShards === undefined || warlock.soulShards === 0) {
-                return {
-                    abilityName: ability.name,
-                    success: false,
-                    enemiesKilled: [],
-                    message: `No soul shards to consume!`
-                };
-            }
-
-            const shardsConsumed = warlock.soulShards;
-            const damagePerShard = (ability.damage ?? 10) + Math.floor(this.player.level * 1.5);
-            const totalShardDamage = damagePerShard * shardsConsumed;
-            warlock.soulShards = 0;
-
-            // Deal damage to target or first enemy
-            const target = targetId 
-                ? this.enemies.find(e => e.id === targetId) 
-                : this.enemies[0];
-            
-            if (!target) {
-                return {
-                    abilityName: ability.name,
-                    success: false,
-                    enemiesKilled: [],
-                    message: 'No target available'
-                };
-            }
-
-            const damageModifier = this.getDamageReceivedModifier(target.id);
-            totalDamage = Math.max(1, Math.floor(totalShardDamage * damageModifier));
-            target.health = Math.max(0, target.health - totalDamage);
-            this.updateCombatantHealth(target.id, target.health);
-
-            this.state.log.push(`${ability.name} consumes ${shardsConsumed} soul shards!`);
-            this.state.log.push(`${ability.name} hits ${target.name} for ${totalDamage} damage!`);
-
-            if (target.health <= 0) {
-                enemiesKilled.push(target.id);
-                this.state.log.push(`${target.name} is defeated!`);
-                this.removeDeadEnemy(target.id);
-            }
-
-            message = `${this.player.name} uses ${ability.name}, consuming ${shardsConsumed} shards for ${totalDamage} damage!`;
-            this.checkCombatEnd();
-
-            return {
-                abilityName: ability.name,
-                success: true,
-                damage: totalDamage,
-                effectApplied: 'consume_shards',
-                enemiesKilled,
-                message
-            };
-        }
-
-        // Handle full restore abilities (like Wish)
-        if (ability.effect === 'full_restore') {
+        // === STEP 3: Handle full restore ===
+        if (ability.fullRestore) {
             this.player.stats.health = this.player.getMaxHealth();
             this.player.stats.mana = this.player.getMaxMana();
-            // Reset all cooldowns
             for (const ab of this.player.abilities) {
                 ab.currentCooldown = 0;
             }
             message = `${this.player.name} uses ${ability.name}! Fully restored health, mana, and cooldowns!`;
             this.state.log.push(message);
-
             return {
                 abilityName: ability.name,
                 success: true,
@@ -1238,182 +1105,256 @@ export class CombatEngine {
             };
         }
 
-        // Handle invulnerability abilities
-        if (ability.effect === 'invulnerable' || ability.effect === 'magic_immunity') {
+        // === STEP 4: Handle invulnerability ===
+        if (ability.invulnerable) {
             this.player.applyBuff(ability.name, { defense: 999 }, 1);
             message = `${this.player.name} uses ${ability.name} and becomes temporarily invulnerable!`;
             this.state.log.push(message);
-
             return {
                 abilityName: ability.name,
                 success: true,
-                effectApplied: ability.effect,
+                effectApplied: 'invulnerable',
                 enemiesKilled: [],
                 message
             };
         }
 
-        // Handle AOE damage abilities (check both effect === 'aoe' and isAoe flag)
-        if (ability.effect === 'aoe' || ability.isAoe) {
-            // Use ability's damage value directly, or scale from base attack
-            const abilityDamage = ability.damage ?? Math.floor(this.player.basicAttack().damage * 0.8);
+        // === STEP 5: Handle self-buffs ===
+        if (ability.selfBuff) {
+            const buffType = ability.selfBuff.type;
+            const duration = ability.selfBuff.duration;
+            const value = ability.selfBuff.value ?? 25;
             
-            const aliveEnemies = this.enemies.filter(e => e.health > 0);
-            for (const enemy of aliveEnemies) {
-                const damageModifier = this.getDamageReceivedModifier(enemy.id);
-                const finalDamage = Math.max(1, Math.floor(abilityDamage * damageModifier));
-                
-                enemy.health = Math.max(0, enemy.health - finalDamage);
-                totalDamage += finalDamage;
-                
-                this.state.log.push(`${ability.name} hits ${enemy.name} for ${finalDamage} damage!`);
-                
-                if (enemy.health <= 0) {
-                    enemiesKilled.push(enemy.id);
-                    this.state.log.push(`${enemy.name} is defeated!`);
-                }
+            if (buffType === 'strengthen') {
+                const attackBonus = Math.floor(this.player.stats.attack * (value / 100));
+                this.player.applyBuff(ability.name, { attack: attackBonus }, duration);
+                message = `${this.player.name} uses ${ability.name}, increasing attack by ${attackBonus} for ${duration} turns!`;
+            } else if (buffType === 'fortify') {
+                const defenseBonus = Math.floor(this.player.stats.defense * (value / 100));
+                this.player.applyBuff(ability.name, { defense: defenseBonus }, duration);
+                message = `${this.player.name} uses ${ability.name}, increasing defense by ${defenseBonus} for ${duration} turns!`;
+            } else if (buffType === 'regeneration') {
+                this.applyStatusEffect(this.player.id, StatusEffectType.REGENERATION, duration, ability.name, this.player.level, value);
+                message = `${this.player.name} uses ${ability.name}, gaining regeneration for ${duration} turns!`;
             }
             
-            // Remove dead enemies
-            for (const id of enemiesKilled) {
-                this.removeDeadEnemy(id);
-            }
-            
-            message = `${this.player.name} uses ${ability.name}, dealing ${totalDamage} total damage to all enemies!`;
-            this.checkCombatEnd();
-
+            this.state.log.push(message);
             return {
                 abilityName: ability.name,
                 success: true,
-                damage: totalDamage,
-                isAoe: true,
-                enemiesKilled,
+                effectApplied: buffType,
+                enemiesKilled: [],
                 message
             };
         }
 
-        // Handle abilities with both damage AND healing (like Soul Drain)
-        if (ability.damage && ability.healing && targetId) {
-            const target = this.enemies.find(e => e.id === targetId);
-            if (!target) {
-                return {
-                    abilityName: ability.name,
-                    success: false,
-                    enemiesKilled: [],
-                    message: 'Target not found'
-                };
-            }
-
-            // Deal damage
-            const damageModifier = this.getDamageReceivedModifier(target.id);
-            totalDamage = Math.max(1, Math.floor(ability.damage * damageModifier));
-            target.health = Math.max(0, target.health - totalDamage);
-            
-            // Heal player
-            totalHealing = this.player.heal(ability.healing);
-            
-            this.state.log.push(`${ability.name} drains ${target.name} for ${totalDamage} damage!`);
-            this.state.log.push(`${this.player.name} heals for ${totalHealing} HP!`);
-
-            if (target.health <= 0) {
-                enemiesKilled.push(target.id);
-                this.state.log.push(`${target.name} is defeated!`);
-                this.removeDeadEnemy(target.id);
-            }
-
-            message = `${this.player.name} uses ${ability.name}, dealing ${totalDamage} damage and healing for ${totalHealing}!`;
-            this.checkCombatEnd();
-
-            return {
-                abilityName: ability.name,
-                success: true,
-                damage: totalDamage,
-                healing: totalHealing,
-                enemiesKilled,
-                message
-            };
-        }
-
-        // Handle single-target damage abilities
-        if (ability.damage && targetId) {
-            const target = this.enemies.find(e => e.id === targetId);
-            if (!target) {
-                return {
-                    abilityName: ability.name,
-                    success: false,
-                    enemiesKilled: [],
-                    message: 'Target not found'
-                };
-            }
-
-            // Determine if damage is a multiplier (< 5) or flat value (>= 5)
-            // Fighter abilities use multipliers (0.75, 1.5), Warlock uses flat (8, 12, 25)
-            let abilityDamage: number;
-            if (ability.damage < 5) {
-                // Multiplier-based (Fighter style)
-                const baseDamage = this.player.basicAttack().damage;
-                abilityDamage = Math.floor(baseDamage * ability.damage);
+        // === STEP 6: Handle healing (self-target) ===
+        if (ability.healing && targetType === 'self') {
+            let healAmount: number;
+            if (ability.healingCalc === 'percent_max_hp') {
+                healAmount = Math.floor(this.player.getMaxHealth() * (ability.healing / 100));
             } else {
-                // Flat damage with level scaling (Warlock style)
-                abilityDamage = ability.damage + Math.floor(this.player.level * 1.2);
-                
-                // Check for soul shard bonus (Shadow Bolt)
+                healAmount = ability.healing;
+            }
+            totalHealing = this.player.heal(healAmount);
+            message = `${this.player.name} uses ${ability.name} and heals for ${totalHealing} HP!`;
+            this.state.log.push(message);
+            return {
+                abilityName: ability.name,
+                success: true,
+                healing: totalHealing,
+                enemiesKilled: [],
+                message
+            };
+        }
+
+        // === STEP 7: Handle status effects on enemies (no damage) ===
+        if (ability.statusEffect && !ability.damage && targetType === 'enemy') {
+            const target = this.enemies.find(e => e.id === targetId);
+            if (!target) {
+                return {
+                    abilityName: ability.name,
+                    success: false,
+                    enemiesKilled: [],
+                    message: 'Target not found'
+                };
+            }
+
+            const effectType = this.mapStatusEffectType(ability.statusEffect.type);
+            if (effectType) {
+                this.applyStatusEffect(
+                    target.id,
+                    effectType,
+                    ability.statusEffect.duration,
+                    ability.name,
+                    this.player.level,
+                    ability.statusEffect.value
+                );
+            }
+            
+            message = `${this.player.name} uses ${ability.name} on ${target.name}!`;
+            this.state.log.push(message);
+            return {
+                abilityName: ability.name,
+                success: true,
+                effectApplied: ability.statusEffect.type,
+                enemiesKilled: [],
+                message
+            };
+        }
+
+        // === STEP 8: Calculate damage ===
+        let baseDamage = 0;
+        if (ability.damage) {
+            if (ability.damageCalc === 'multiplier') {
+                // Multiplier-based (Fighter style): damage value is a multiplier of basic attack
+                const attackDamage = this.player.basicAttack().damage;
+                baseDamage = Math.floor(attackDamage * ability.damage);
+            } else {
+                // Flat damage (Warlock style): base damage + level scaling
+                const levelScale = ability.levelScaling ?? 1.0;
+                baseDamage = ability.damage + Math.floor(this.player.level * levelScale);
+            }
+
+            // Handle soul shard bonus damage
+            if (ability.consumesShards) {
                 const warlock = this.player as { soulShards?: number };
-                if (warlock.soulShards !== undefined && warlock.soulShards > 0 && ability.id === 'shadow_bolt') {
-                    const shardBonus = warlock.soulShards * 4;
-                    abilityDamage += shardBonus;
-                    this.state.log.push(`Soul shards add ${shardBonus} bonus damage!`);
+                if (warlock.soulShards && warlock.soulShards > 0) {
+                    const shardBonus = warlock.soulShards * (ability.damagePerShard ?? 0);
+                    
+                    // For Soul Harvest, damage IS per shard (not bonus)
+                    if (ability.effect === 'soul_harvest') {
+                        baseDamage = baseDamage * warlock.soulShards;
+                        this.state.log.push(`${ability.name} consumes ${warlock.soulShards} soul shards!`);
+                    } else if (shardBonus > 0) {
+                        baseDamage += shardBonus;
+                        this.state.log.push(`Soul shards add ${shardBonus} bonus damage!`);
+                    }
                     warlock.soulShards = 0;
                 }
             }
-            
-            const damageModifier = this.getDamageReceivedModifier(target.id);
-            totalDamage = Math.max(1, Math.floor(abilityDamage * damageModifier));
-
-            // Apply stun effect if ability has it
-            if (ability.effect === 'stun') {
-                this.applyStatusEffect(
-                    target.id,
-                    StatusEffectType.STUN,
-                    1, // duration in turns
-                    ability.name,
-                    this.player.level
-                );
-                this.state.log.push(`${target.name} is stunned!`);
-            }
-
-            target.health = Math.max(0, target.health - totalDamage);
-            this.state.log.push(`${ability.name} hits ${target.name} for ${totalDamage} damage!`);
-
-            if (target.health <= 0) {
-                enemiesKilled.push(target.id);
-                this.state.log.push(`${target.name} is defeated!`);
-                this.removeDeadEnemy(target.id);
-            }
-
-            message = `${this.player.name} uses ${ability.name} on ${target.name} for ${totalDamage} damage!`;
-            this.checkCombatEnd();
-
-            return {
-                abilityName: ability.name,
-                success: true,
-                damage: totalDamage,
-                effectApplied: ability.effect,
-                enemiesKilled,
-                message
-            };
         }
 
-        // Fallback for abilities without clear implementation
-        message = `${this.player.name} uses ${ability.name}!`;
-        this.state.log.push(message);
+        // === STEP 9: Apply damage to targets ===
+        if (baseDamage > 0) {
+            if (targetType === 'all_enemies') {
+                // AOE damage
+                const aliveEnemies = this.enemies.filter(e => e.health > 0);
+                for (const enemy of aliveEnemies) {
+                    const damageModifier = this.getDamageReceivedModifier(enemy.id);
+                    const finalDamage = Math.max(1, Math.floor(baseDamage * damageModifier));
+                    
+                    enemy.health = Math.max(0, enemy.health - finalDamage);
+                    this.updateCombatantHealth(enemy.id, enemy.health);
+                    totalDamage += finalDamage;
+                    
+                    this.state.log.push(`${ability.name} hits ${enemy.name} for ${finalDamage} damage!`);
+                    
+                    if (enemy.health <= 0) {
+                        enemiesKilled.push(enemy.id);
+                        this.state.log.push(`${enemy.name} is defeated!`);
+                    }
+                }
+                
+                // Remove dead enemies
+                for (const id of enemiesKilled) {
+                    this.removeDeadEnemy(id);
+                }
+                
+                message = `${this.player.name} uses ${ability.name}, dealing ${totalDamage} total damage to all enemies!`;
+            } else {
+                // Single target damage
+                const target = this.enemies.find(e => e.id === targetId);
+                if (!target) {
+                    return {
+                        abilityName: ability.name,
+                        success: false,
+                        enemiesKilled: [],
+                        message: 'Target not found'
+                    };
+                }
+
+                const damageModifier = this.getDamageReceivedModifier(target.id);
+                totalDamage = Math.max(1, Math.floor(baseDamage * damageModifier));
+                
+                target.health = Math.max(0, target.health - totalDamage);
+                this.updateCombatantHealth(target.id, target.health);
+                
+                this.state.log.push(`${ability.name} hits ${target.name} for ${totalDamage} damage!`);
+
+                // Apply status effect to target if ability has one
+                if (ability.statusEffect) {
+                    const effectType = this.mapStatusEffectType(ability.statusEffect.type);
+                    if (effectType) {
+                        this.applyStatusEffect(
+                            target.id,
+                            effectType,
+                            ability.statusEffect.duration,
+                            ability.name,
+                            this.player.level,
+                            ability.statusEffect.value
+                        );
+                        this.state.log.push(`${target.name} is affected by ${ability.statusEffect.type}!`);
+                    }
+                }
+
+                if (target.health <= 0) {
+                    enemiesKilled.push(target.id);
+                    this.state.log.push(`${target.name} is defeated!`);
+                    this.removeDeadEnemy(target.id);
+                }
+
+                message = `${this.player.name} uses ${ability.name} on ${target.name} for ${totalDamage} damage!`;
+            }
+        }
+
+        // === STEP 10: Handle lifesteal ===
+        if (ability.lifestealPercent && totalDamage > 0) {
+            totalHealing = this.player.heal(Math.floor(totalDamage * (ability.lifestealPercent / 100)));
+            this.state.log.push(`${this.player.name} heals for ${totalHealing} HP!`);
+            message += ` Healed for ${totalHealing}!`;
+        }
+
+        // Check combat end
+        this.checkCombatEnd();
+
+        // If no message was set, use a generic one
+        if (!message) {
+            message = `${this.player.name} uses ${ability.name}!`;
+            this.state.log.push(message);
+        }
 
         return {
             abilityName: ability.name,
             success: true,
-            enemiesKilled: [],
+            damage: totalDamage || undefined,
+            healing: totalHealing || undefined,
+            isAoe: targetType === 'all_enemies',
+            enemiesKilled,
             message
         };
+    }
+
+    /**
+     * Maps a string status effect type to the StatusEffectType enum.
+     */
+    private mapStatusEffectType(type: string): StatusEffectType | null {
+        const mapping: Record<string, StatusEffectType> = {
+            'stun': StatusEffectType.STUN,
+            'freeze': StatusEffectType.FREEZE,
+            'sleep': StatusEffectType.SLEEP,
+            'poison': StatusEffectType.POISON,
+            'burn': StatusEffectType.BURN,
+            'bleed': StatusEffectType.BLEED,
+            'slow': StatusEffectType.SLOW,
+            'weaken': StatusEffectType.WEAKEN,
+            'vulnerable': StatusEffectType.VULNERABLE,
+            'haste': StatusEffectType.HASTE,
+            'strengthen': StatusEffectType.STRENGTHEN,
+            'fortify': StatusEffectType.FORTIFY,
+            'regeneration': StatusEffectType.REGENERATION
+        };
+        return mapping[type.toLowerCase()] ?? null;
     }
 
     /**

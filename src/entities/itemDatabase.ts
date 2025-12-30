@@ -196,9 +196,10 @@ export const WEAPONS: Item[] = [
             manaCost: 25,
             cooldown: 4,
             currentCooldown: 0,
+            targetType: 'all_enemies',
             damage: 20,
-            damageType: DamageType.MAGIC,
-            isAoe: true
+            damageCalc: 'flat',
+            damageType: DamageType.MAGIC
         }
     }),
 
@@ -231,7 +232,8 @@ export const WEAPONS: Item[] = [
             manaCost: 0,
             cooldown: 5,
             currentCooldown: 0,
-            effect: 'magic_immunity'
+            targetType: 'self',
+            invulnerable: true
         }
     }),
 
@@ -258,9 +260,11 @@ export const WEAPONS: Item[] = [
             manaCost: 40,
             cooldown: 6,
             currentCooldown: 0,
+            targetType: 'enemy',
             damage: 50,
+            damageCalc: 'flat',
             damageType: DamageType.NECROTIC,
-            healing: 25
+            lifestealPercent: 50
         }
     })
 ];
@@ -430,7 +434,8 @@ export const ARMOR: Item[] = [
             manaCost: 50,
             cooldown: 10,
             currentCooldown: 0,
-            effect: 'invulnerable'
+            targetType: 'self',
+            invulnerable: true
         }
     })
 ];
@@ -533,9 +538,10 @@ export const ACCESSORIES: Item[] = [
             manaCost: 30,
             cooldown: 5,
             currentCooldown: 0,
+            targetType: 'all_enemies',
             damage: 30,
-            damageType: DamageType.FIRE,
-            isAoe: true
+            damageCalc: 'flat',
+            damageType: DamageType.FIRE
         }
     }),
     createItem({
@@ -581,8 +587,8 @@ export const ACCESSORIES: Item[] = [
             manaCost: 0,
             cooldown: 99, // Essentially once per dungeon
             currentCooldown: 0,
-            healing: 999,
-            effect: 'full_restore'
+            targetType: 'self',
+            fullRestore: true
         }
     })
 ];

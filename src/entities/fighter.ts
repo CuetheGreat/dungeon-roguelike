@@ -71,8 +71,10 @@ export class Fighter extends Player {
                 manaCost: 10,
                 cooldown: 1,
                 currentCooldown: 0,
-                damage: 1.5, // Multiplier
-                source: 'class'
+                source: 'class',
+                targetType: 'enemy',
+                damage: 1.5,
+                damageCalc: 'multiplier'
             },
             {
                 id: 'shield_bash',
@@ -81,9 +83,11 @@ export class Fighter extends Player {
                 manaCost: 15,
                 cooldown: 3,
                 currentCooldown: 0,
+                source: 'class',
+                targetType: 'enemy',
                 damage: 0.75,
-                effect: 'stun',
-                source: 'class'
+                damageCalc: 'multiplier',
+                statusEffect: { type: 'stun', duration: 1 }
             },
             {
                 id: 'battle_cry',
@@ -92,8 +96,9 @@ export class Fighter extends Player {
                 manaCost: 20,
                 cooldown: 5,
                 currentCooldown: 0,
-                effect: 'attack_buff',
-                source: 'class'
+                source: 'class',
+                targetType: 'self',
+                selfBuff: { type: 'strengthen', duration: 3, value: 25 }
             },
             {
                 id: 'second_wind',
@@ -102,8 +107,10 @@ export class Fighter extends Player {
                 manaCost: 25,
                 cooldown: 6,
                 currentCooldown: 0,
-                healing: 0.3, // Percentage of max health
-                source: 'class'
+                source: 'class',
+                targetType: 'self',
+                healing: 30,
+                healingCalc: 'percent_max_hp'
             },
             {
                 id: 'whirlwind',
@@ -112,9 +119,10 @@ export class Fighter extends Player {
                 manaCost: 30,
                 cooldown: 4,
                 currentCooldown: 0,
+                source: 'class',
+                targetType: 'all_enemies',
                 damage: 0.75,
-                effect: 'aoe',
-                source: 'class'
+                damageCalc: 'multiplier'
             }
         ];
     }

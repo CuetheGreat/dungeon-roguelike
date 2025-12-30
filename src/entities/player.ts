@@ -95,9 +95,49 @@ export interface ActiveBuff {
     remainingTurns: number;
 }
 
+/** How to interpret the damage value */
+export type DamageCalculation = 'flat' | 'multiplier';
+
+/** How to interpret the healing value */
+export type HealingCalculation = 'flat' | 'percent_max_hp';
+
+/** Who the ability targets */
+export type AbilityTarget = 'enemy' | 'self' | 'all_enemies';
+
+/** Status effect to apply with an ability */
+export interface AbilityStatusEffect {
+    /** The type of status effect */
+    type: string; // Maps to StatusEffectType in combatEngine
+    /** Duration in turns */
+    duration: number;
+    /** Value (damage per turn for DOT, % modifier for buffs/debuffs) */
+    value?: number;
+}
+
+/** Resource cost beyond mana (health sacrifice, soul shards, etc.) */
+export interface AbilityResourceCost {
+    /** Type of resource */
+    type: 'health' | 'shards';
+    /** Percentage of current/max resource */
+    percent?: number;
+    /** Flat amount */
+    flat?: number;
+}
+
+/** Resource gained from using the ability */
+export interface AbilityResourceGain {
+    /** Type of resource */
+    type: 'mana' | 'health';
+    /** Percentage of max resource */
+    percent?: number;
+    /** Flat amount */
+    flat?: number;
+}
+
 /**
  * Class-specific or equipment-granted ability.
  * Abilities are special actions that cost mana and may have cooldowns.
+ * Uses a standardized format for generic combat engine handling.
  * @interface
  */
 export interface Ability {
@@ -113,15 +153,55 @@ export interface Ability {
     cooldown: number;
     /** Current cooldown remaining (0 = ready) */
     currentCooldown: number;
-    /** Damage dealt (if applicable) */
-    damage?: number;
-    /** Healing provided (if applicable) */
-    healing?: number;
-    /** Special effect type */
-    effect?: string;
     /** Source of the ability ('class' or item name) */
     source?: string;
-    /** Whether this ability hits all enemies */
+    
+    // === Targeting ===
+    /** Who the ability targets (default: 'enemy') */
+    targetType?: AbilityTarget;
+    
+    // === Damage ===
+    /** Damage value (interpretation depends on damageCalc) */
+    damage?: number;
+    /** How to calculate damage: 'flat' (base + level scaling) or 'multiplier' (% of basic attack) */
+    damageCalc?: DamageCalculation;
+    /** Level scaling multiplier for flat damage (default: 1.0) */
+    levelScaling?: number;
+    
+    // === Healing ===
+    /** Healing value (interpretation depends on healingCalc) */
+    healing?: number;
+    /** How to calculate healing: 'flat' or 'percent_max_hp' */
+    healingCalc?: HealingCalculation;
+    /** Percent of damage dealt to heal (lifesteal) */
+    lifestealPercent?: number;
+    
+    // === Status Effects ===
+    /** Status effect to apply to target */
+    statusEffect?: AbilityStatusEffect;
+    /** Status effect to apply to self (buff) */
+    selfBuff?: AbilityStatusEffect;
+    
+    // === Resource Costs/Gains ===
+    /** Additional resource cost (beyond mana) */
+    resourceCost?: AbilityResourceCost;
+    /** Resource gained from using ability */
+    resourceGain?: AbilityResourceGain;
+    
+    // === Special Flags ===
+    /** Whether this ability uses soul shards for bonus damage */
+    consumesShards?: boolean;
+    /** Bonus damage per shard consumed */
+    damagePerShard?: number;
+    /** Whether this is a full restore (health, mana, cooldowns) */
+    fullRestore?: boolean;
+    /** Whether this grants invulnerability */
+    invulnerable?: boolean;
+    
+    // === Legacy (for backwards compatibility during transition) ===
+    /** @deprecated Use statusEffect instead */
+    effect?: string;
+    /** @deprecated Use targetType: 'all_enemies' instead */
     isAoe?: boolean;
 }
 
