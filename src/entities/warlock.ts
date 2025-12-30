@@ -30,17 +30,17 @@ import { getRNG, isRNGInitialized } from '../game/seed';
  * - Weaker basic attacks
  * 
  * **Abilities:**
- * - Eldritch Blast: Magic damage (8 mana, 1 turn CD)
- * - Drain Life: Damage + 50% lifesteal (20 mana, 3 turn CD)
- * - Hex: +25% damage taken debuff for 3 turns (15 mana, 4 turn CD)
- * - Shadow Bolt: High damage + soul shard bonus (25 mana, 2 turn CD)
- * - Dark Pact: Sacrifice 20% HP for 40% mana (0 mana, 5 turn CD)
- * - Soul Harvest: Consume shards for massive damage (35 mana, 6 turn CD)
+ * - Eldritch Blast: Magic damage (6 mana, 1 turn CD)
+ * - Drain Life: Damage + 40% lifesteal (15 mana, 3 turn CD)
+ * - Hex: +20% damage taken debuff for 3 turns (12 mana, 4 turn CD)
+ * - Shadow Bolt: Damage + soul shard bonus (18 mana, 2 turn CD)
+ * - Dark Pact: Sacrifice 15% HP for 30% mana (0 mana, 5 turn CD)
+ * - Soul Harvest: Consume shards for damage (25 mana, 6 turn CD)
  * 
  * **Soul Shards:**
  * - Gain 1 shard when killing an enemy (max 3)
- * - Shadow Bolt consumes all shards for +10 damage each
- * - Soul Harvest consumes all shards for 20+ damage per shard
+ * - Shadow Bolt consumes all shards for +4 damage each
+ * - Soul Harvest consumes all shards for 10+ damage per shard
  * 
  * @extends Player
  * 
@@ -85,28 +85,28 @@ export class Warlock extends Player {
                 id: 'eldritch_blast',
                 name: 'Eldritch Blast',
                 description: 'Fire a beam of crackling energy, dealing magic damage.',
-                manaCost: 8,
+                manaCost: 6,
                 cooldown: 1,
                 currentCooldown: 0,
-                damage: 12,
+                damage: 8,
                 source: 'class'
             },
             {
                 id: 'drain_life',
                 name: 'Drain Life',
-                description: 'Siphon life from an enemy, dealing damage and healing yourself for 50% of damage dealt.',
-                manaCost: 20,
+                description: 'Siphon life from an enemy, dealing damage and healing yourself for 40% of damage dealt.',
+                manaCost: 15,
                 cooldown: 3,
                 currentCooldown: 0,
-                damage: 12,
+                damage: 6,
                 effect: 'lifesteal',
                 source: 'class'
             },
             {
                 id: 'hex',
                 name: 'Hex',
-                description: 'Curse an enemy, increasing damage they take by 25% for 3 turns.',
-                manaCost: 15,
+                description: 'Curse an enemy, increasing damage they take by 20% for 3 turns.',
+                manaCost: 12,
                 cooldown: 4,
                 currentCooldown: 0,
                 effect: 'debuff',
@@ -116,16 +116,16 @@ export class Warlock extends Player {
                 id: 'shadow_bolt',
                 name: 'Shadow Bolt',
                 description: 'Hurl a bolt of shadow energy. Consumes soul shards for bonus damage.',
-                manaCost: 25,
+                manaCost: 18,
                 cooldown: 2,
                 currentCooldown: 0,
-                damage: 25,
+                damage: 12,
                 source: 'class'
             },
             {
                 id: 'dark_pact',
                 name: 'Dark Pact',
-                description: 'Sacrifice 20% of current health to restore 40% of max mana.',
+                description: 'Sacrifice 15% of current health to restore 30% of max mana.',
                 manaCost: 0,
                 cooldown: 5,
                 currentCooldown: 0,
@@ -135,11 +135,11 @@ export class Warlock extends Player {
             {
                 id: 'soul_harvest',
                 name: 'Soul Harvest',
-                description: 'Passive: Killing an enemy grants a soul shard (max 3). Active: Consume all shards to deal massive damage.',
-                manaCost: 35,
+                description: 'Passive: Killing an enemy grants a soul shard (max 3). Active: Consume all shards to deal damage.',
+                manaCost: 25,
                 cooldown: 6,
                 currentCooldown: 0,
-                damage: 20, // Per shard
+                damage: 10, // Per shard
                 effect: 'consume_shards',
                 source: 'class'
             }
@@ -162,7 +162,7 @@ export class Warlock extends Player {
 
     /**
      * Executes Eldritch Blast - basic magic attack.
-     * Deals 12 base damage + 1.5 per level, can crit.
+     * Deals 8 base damage + 1 per level, can crit.
      * Uses seeded RNG for crit determination.
      * 
      * @returns Object with damage dealt and crit status, or null if ability unavailable
@@ -171,7 +171,7 @@ export class Warlock extends Player {
         const ability = this.useAbility('eldritch_blast');
         if (!ability) return null;
 
-        const baseDamage = ability.damage ?? 15;
+        const baseDamage = ability.damage ?? 8;
         const critChance = this.getCritChance();
         const critMultiplier = this.getCritMultiplier();
 
@@ -182,15 +182,15 @@ export class Warlock extends Player {
             ? Math.floor(baseDamage * critMultiplier)
             : baseDamage;
 
-        // Scale with level
-        const scaledDamage = damage + Math.floor(this.level * 1.5);
+        // Scale with level (reduced scaling)
+        const scaledDamage = damage + Math.floor(this.level * 1);
 
         return { damage: scaledDamage, isCrit };
     }
 
     /**
      * Executes Drain Life - damage + heal.
-     * Deals 12 base damage + 1.2 per level, heals for 50% of damage dealt.
+     * Deals 6 base damage + 0.8 per level, heals for 40% of damage dealt.
      * Uses seeded RNG for crit determination.
      * 
      * @returns Object with damage dealt and amount healed, or null if ability unavailable
@@ -199,7 +199,7 @@ export class Warlock extends Player {
         const ability = this.useAbility('drain_life');
         if (!ability) return null;
 
-        const baseDamage = (ability.damage ?? 12) + Math.floor(this.level * 1.2);
+        const baseDamage = (ability.damage ?? 6) + Math.floor(this.level * 0.8);
         const critChance = this.getCritChance();
         const critMultiplier = this.getCritMultiplier();
 
@@ -210,14 +210,14 @@ export class Warlock extends Player {
             ? Math.floor(baseDamage * critMultiplier)
             : baseDamage;
 
-        const healed = this.heal(Math.floor(damage * 0.5));
+        const healed = this.heal(Math.floor(damage * 0.4));
 
         return { damage, healed };
     }
 
     /**
      * Executes Hex - applies damage vulnerability debuff to enemy.
-     * Target takes 25% more damage for 3 turns.
+     * Target takes 20% more damage for 3 turns.
      * 
      * @returns Object with damage increase percentage and duration, or null if ability unavailable
      */
@@ -225,12 +225,12 @@ export class Warlock extends Player {
         const ability = this.useAbility('hex');
         if (!ability) return null;
 
-        return { damageIncrease: 0.25, duration: 3 };
+        return { damageIncrease: 0.20, duration: 3 };
     }
 
     /**
      * Executes Shadow Bolt - consumes soul shards for bonus damage.
-     * Deals 25 base damage + 2 per level + 10 per soul shard consumed.
+     * Deals 12 base damage + 1.2 per level + 4 per soul shard consumed.
      * Uses seeded RNG for crit determination.
      * 
      * @returns Object with damage, crit status, and shards consumed, or null if ability unavailable
@@ -239,10 +239,10 @@ export class Warlock extends Player {
         const ability = this.useAbility('shadow_bolt');
         if (!ability) return null;
 
-        const baseDamage = (ability.damage ?? 25) + Math.floor(this.level * 2);
+        const baseDamage = (ability.damage ?? 12) + Math.floor(this.level * 1.2);
         
-        // Bonus damage per soul shard
-        const shardBonus = this.soulShards * 10;
+        // Bonus damage per soul shard (reduced from 10 to 4)
+        const shardBonus = this.soulShards * 4;
         const shardsConsumed = this.soulShards;
         this.soulShards = 0;
 
@@ -262,7 +262,7 @@ export class Warlock extends Player {
 
     /**
      * Executes Dark Pact - sacrifice health for mana.
-     * Sacrifices 20% of current health to restore 40% of max mana.
+     * Sacrifices 15% of current health to restore 30% of max mana.
      * Cannot be used if it would kill the warlock.
      * 
      * @returns Object with health lost and mana restored, or null if ability unavailable or would kill
@@ -271,8 +271,8 @@ export class Warlock extends Player {
         const ability = this.useAbility('dark_pact');
         if (!ability) return null;
 
-        const healthCost = Math.floor(this.stats.health * 0.2);
-        const manaRestore = Math.floor(this.getMaxMana() * 0.4);
+        const healthCost = Math.floor(this.stats.health * 0.15);
+        const manaRestore = Math.floor(this.getMaxMana() * 0.3);
 
         // Can't kill yourself with Dark Pact
         if (this.stats.health <= healthCost) {
@@ -286,8 +286,8 @@ export class Warlock extends Player {
     }
 
     /**
-     * Executes Soul Harvest - consume all shards for massive damage.
-     * Deals (20 + 3 per level) damage per soul shard consumed.
+     * Executes Soul Harvest - consume all shards for significant damage.
+     * Deals (10 + 1.5 per level) damage per soul shard consumed.
      * Requires at least 1 soul shard to use.
      * 
      * @returns Object with total damage and shards consumed, or null if no shards or ability unavailable
@@ -298,7 +298,7 @@ export class Warlock extends Player {
         const ability = this.useAbility('soul_harvest');
         if (!ability) return null;
 
-        const damagePerShard = (ability.damage ?? 20) + Math.floor(this.level * 3);
+        const damagePerShard = (ability.damage ?? 10) + Math.floor(this.level * 1.5);
         const damage = damagePerShard * this.soulShards;
         const shardsConsumed = this.soulShards;
 
