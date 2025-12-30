@@ -1091,7 +1091,7 @@ export abstract class Player {
 
     /**
      * Reduces all ability cooldowns by 1.
-     * Called at end of turn.
+     * Called at start of player's turn.
      * Ticks both class abilities and item-granted abilities.
      */
     tickCooldowns(): void {
@@ -1117,8 +1117,8 @@ export abstract class Player {
     }
 
     /**
-     * End of turn processing.
-     * Ticks cooldowns and buffs.
+     * Turn processing - ticks cooldowns and buffs.
+     * Called at start of player's combat turn.
      */
     endTurn(): void {
         this.tickCooldowns();
