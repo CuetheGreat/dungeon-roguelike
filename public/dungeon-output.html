@@ -1,0 +1,1869 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dungeon Map</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap');
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'JetBrains Mono', monospace;
+            background: #0a0a0f;
+            background-image: 
+                radial-gradient(ellipse at top, #1a1a2e 0%, transparent 50%),
+                radial-gradient(ellipse at bottom, #16213e 0%, transparent 50%),
+                repeating-linear-gradient(
+                    0deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(255,255,255,0.01) 2px,
+                    rgba(255,255,255,0.01) 4px
+                );
+            min-height: 100vh;
+            color: #e8e8e8;
+            overflow-x: auto;
+        }
+        
+        header {
+            padding: 2rem;
+            text-align: center;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            background: linear-gradient(180deg, rgba(26,26,46,0.8) 0%, transparent 100%);
+        }
+        
+        h1 {
+            font-family: 'Cinzel', serif;
+            font-size: 2.5rem;
+            font-weight: 700;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            background: linear-gradient(135deg, #ffd700 0%, #ff6b35 50%, #ffd700 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-shadow: 0 0 40px rgba(255,215,0,0.3);
+        }
+        
+        .stats {
+            margin-top: 0.5rem;
+            font-size: 0.85rem;
+            color: #888;
+        }
+        
+        .controls {
+            padding: 1rem 2rem;
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+            flex-wrap: wrap;
+            background: rgba(0,0,0,0.3);
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        
+        .controls label {
+            font-size: 0.8rem;
+            color: #aaa;
+        }
+        
+        .controls input {
+            font-family: inherit;
+            padding: 0.5rem 1rem;
+            background: #1a1a2e;
+            border: 1px solid #333;
+            color: #fff;
+            border-radius: 4px;
+            width: 200px;
+        }
+        
+        .controls button {
+            font-family: inherit;
+            padding: 0.5rem 1.5rem;
+            background: linear-gradient(135deg, #ff6b35, #f7931e);
+            border: none;
+            color: #000;
+            font-weight: 500;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: transform 0.1s, box-shadow 0.2s;
+        }
+        
+        .controls button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 20px rgba(255,107,53,0.4);
+        }
+        
+        .legend {
+            display: flex;
+            gap: 1rem;
+            margin-left: auto;
+            flex-wrap: wrap;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-size: 0.75rem;
+        }
+        
+        .legend-color {
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+        }
+        
+        #map-container {
+            padding: 2rem;
+            overflow-x: auto;
+        }
+        
+        #dungeon-map {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+            min-width: fit-content;
+        }
+        
+        .layer {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin: 0.5rem 0;
+            position: relative;
+        }
+        
+        .layer-label {
+            font-size: 0.7rem;
+            color: #555;
+            width: 50px;
+            text-align: right;
+            flex-shrink: 0;
+        }
+        
+        .rooms {
+            display: flex;
+            gap: 2rem;
+            justify-content: center;
+            min-width: 400px;
+        }
+        
+        .room {
+            width: 70px;
+            height: 70px;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            position: relative;
+            border: 2px solid rgba(255,255,255,0.1);
+        }
+        
+        .room:hover {
+            transform: scale(1.15);
+            z-index: 100;
+        }
+        
+        .room-type {
+            font-size: 0.7rem;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+        }
+        
+        .room-id {
+            font-size: 0.55rem;
+            opacity: 0.6;
+            margin-top: 2px;
+        }
+        
+        .room-level {
+            position: absolute;
+            bottom: -18px;
+            font-size: 0.55rem;
+            color: #666;
+        }
+        
+        /* Room type colors */
+        .room-entrance {
+            background: linear-gradient(135deg, #2d5a27, #1e3d1a);
+            border-color: #4a9c3f;
+            box-shadow: 0 0 20px rgba(74,156,63,0.3);
+        }
+        
+        .room-combat {
+            background: linear-gradient(135deg, #8b2635, #5c1a23);
+            border-color: #c73e4d;
+            box-shadow: 0 0 15px rgba(199,62,77,0.2);
+        }
+        
+        .room-elite {
+            background: linear-gradient(135deg, #6b1a5c, #3d0f35);
+            border-color: #a32d8c;
+            box-shadow: 0 0 20px rgba(163,45,140,0.3);
+        }
+        
+        .room-boss {
+            background: linear-gradient(135deg, #1a1a1a, #000);
+            border-color: #ffd700;
+            box-shadow: 0 0 30px rgba(255,215,0,0.4), inset 0 0 20px rgba(255,0,0,0.2);
+        }
+        
+        .room-treasure {
+            background: linear-gradient(135deg, #b8860b, #8b6508);
+            border-color: #ffd700;
+            box-shadow: 0 0 20px rgba(255,215,0,0.4);
+        }
+        
+        .room-rest {
+            background: linear-gradient(135deg, #1e4d6b, #0f2d40);
+            border-color: #3498db;
+            box-shadow: 0 0 15px rgba(52,152,219,0.3);
+        }
+        
+        .room-shop {
+            background: linear-gradient(135deg, #5d4e37, #3d3225);
+            border-color: #c9a959;
+            box-shadow: 0 0 15px rgba(201,169,89,0.2);
+        }
+        
+        .room-event {
+            background: linear-gradient(135deg, #4a3f6b, #2d2640);
+            border-color: #7c6fb0;
+            box-shadow: 0 0 15px rgba(124,111,176,0.3);
+        }
+        
+        .room-puzzle {
+            background: linear-gradient(135deg, #1a5c5c, #0f3535);
+            border-color: #2dd4bf;
+            box-shadow: 0 0 15px rgba(45,212,191,0.3);
+        }
+        
+        /* SVG connections */
+        #connections-svg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+            z-index: -1;
+        }
+        
+        .connection-line {
+            stroke: rgba(255,255,255,0.15);
+            stroke-width: 2;
+            fill: none;
+        }
+        
+        .connection-line.highlighted {
+            stroke: rgba(255,215,0,0.6);
+            stroke-width: 3;
+        }
+        
+        /* Tooltip */
+        .tooltip {
+            position: fixed;
+            background: #1a1a2e;
+            border: 1px solid #333;
+            padding: 1rem;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s;
+            z-index: 1000;
+            max-width: 250px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+        }
+        
+        .tooltip.visible {
+            opacity: 1;
+        }
+        
+        .tooltip h3 {
+            font-family: 'Cinzel', serif;
+            margin-bottom: 0.5rem;
+            color: #ffd700;
+        }
+        
+        .tooltip p {
+            color: #aaa;
+            line-height: 1.4;
+        }
+        
+        .tooltip .connections-list {
+            margin-top: 0.5rem;
+            padding-top: 0.5rem;
+            border-top: 1px solid #333;
+            font-size: 0.7rem;
+            color: #888;
+        }
+    </style>
+<script>window.DUNGEON_DATA = {
+  "seed": "my_epic_seed",
+  "rooms": [
+    {
+      "id": "5a652d22-f20a-4d9e-b58a-1a71c750a86e",
+      "type": "entrance",
+      "level": 1,
+      "state": "available",
+      "connections": [
+        "d97aecf8-faa3-4aca-b004-15dfaa8398f7"
+      ],
+      "description": "This is a entrance room at level 1."
+    },
+    {
+      "id": "d97aecf8-faa3-4aca-b004-15dfaa8398f7",
+      "type": "combat",
+      "level": 2,
+      "state": "locked",
+      "connections": [
+        "5a652d22-f20a-4d9e-b58a-1a71c750a86e",
+        "0d377b73-9619-4c43-9db4-6e2863a345d2"
+      ],
+      "description": "This is a combat room at level 2."
+    },
+    {
+      "id": "0d377b73-9619-4c43-9db4-6e2863a345d2",
+      "type": "combat",
+      "level": 3,
+      "state": "locked",
+      "connections": [
+        "d97aecf8-faa3-4aca-b004-15dfaa8398f7",
+        "ecf8e2f9-ba8f-4f3f-a4cb-81a0be09b716"
+      ],
+      "description": "This is a combat room at level 3."
+    },
+    {
+      "id": "ecf8e2f9-ba8f-4f3f-a4cb-81a0be09b716",
+      "type": "rest",
+      "level": 4,
+      "state": "locked",
+      "connections": [
+        "0d377b73-9619-4c43-9db4-6e2863a345d2",
+        "45ae3f6f-a805-427d-95ed-94706d61dcf0",
+        "766becef-2dab-41b7-b5c4-6e84fbf04ff7"
+      ],
+      "description": "This is a rest room at level 4."
+    },
+    {
+      "id": "45ae3f6f-a805-427d-95ed-94706d61dcf0",
+      "type": "rest",
+      "level": 5,
+      "state": "locked",
+      "connections": [
+        "ecf8e2f9-ba8f-4f3f-a4cb-81a0be09b716",
+        "d378a72c-89a7-4489-9d9b-cc211197dd2c",
+        "183da047-70af-42bc-968d-8b07c60197cc"
+      ],
+      "description": "This is a combat room at level 5."
+    },
+    {
+      "id": "766becef-2dab-41b7-b5c4-6e84fbf04ff7",
+      "type": "combat",
+      "level": 5,
+      "state": "locked",
+      "connections": [
+        "ecf8e2f9-ba8f-4f3f-a4cb-81a0be09b716",
+        "28e33653-aa08-40bb-bdb5-3c2104ab0b48",
+        "183da047-70af-42bc-968d-8b07c60197cc"
+      ],
+      "description": "This is a combat room at level 5."
+    },
+    {
+      "id": "183da047-70af-42bc-968d-8b07c60197cc",
+      "type": "treasure",
+      "level": 6,
+      "state": "locked",
+      "connections": [
+        "45ae3f6f-a805-427d-95ed-94706d61dcf0",
+        "766becef-2dab-41b7-b5c4-6e84fbf04ff7",
+        "9a44e160-fb41-4f04-9a3f-7db8b6bc8382"
+      ],
+      "description": "This is a combat room at level 6."
+    },
+    {
+      "id": "28e33653-aa08-40bb-bdb5-3c2104ab0b48",
+      "type": "combat",
+      "level": 6,
+      "state": "locked",
+      "connections": [
+        "766becef-2dab-41b7-b5c4-6e84fbf04ff7",
+        "95397f10-1075-425d-bfb3-fe7cfc29aaa0",
+        "9a44e160-fb41-4f04-9a3f-7db8b6bc8382"
+      ],
+      "description": "This is a combat room at level 6."
+    },
+    {
+      "id": "d378a72c-89a7-4489-9d9b-cc211197dd2c",
+      "type": "combat",
+      "level": 6,
+      "state": "locked",
+      "connections": [
+        "45ae3f6f-a805-427d-95ed-94706d61dcf0",
+        "95397f10-1075-425d-bfb3-fe7cfc29aaa0",
+        "7e796414-46ca-4cb7-81c9-e134fbbb520b"
+      ],
+      "description": "This is a combat room at level 6."
+    },
+    {
+      "id": "7e796414-46ca-4cb7-81c9-e134fbbb520b",
+      "type": "shop",
+      "level": 7,
+      "state": "locked",
+      "connections": [
+        "d378a72c-89a7-4489-9d9b-cc211197dd2c",
+        "97c4f53f-8e25-4db1-9d4e-8a5259516b16",
+        "b4770461-37e7-4e69-8e94-9b098a82bc5e"
+      ],
+      "description": "This is a shop room at level 7."
+    },
+    {
+      "id": "95397f10-1075-425d-bfb3-fe7cfc29aaa0",
+      "type": "elite",
+      "level": 7,
+      "state": "locked",
+      "connections": [
+        "28e33653-aa08-40bb-bdb5-3c2104ab0b48",
+        "d378a72c-89a7-4489-9d9b-cc211197dd2c",
+        "f4107624-3442-4d14-9752-8e81470affd2"
+      ],
+      "description": "This is a elite room at level 7."
+    },
+    {
+      "id": "9a44e160-fb41-4f04-9a3f-7db8b6bc8382",
+      "type": "combat",
+      "level": 7,
+      "state": "locked",
+      "connections": [
+        "183da047-70af-42bc-968d-8b07c60197cc",
+        "28e33653-aa08-40bb-bdb5-3c2104ab0b48",
+        "f4107624-3442-4d14-9752-8e81470affd2"
+      ],
+      "description": "This is a combat room at level 7."
+    },
+    {
+      "id": "f4107624-3442-4d14-9752-8e81470affd2",
+      "type": "shop",
+      "level": 8,
+      "state": "locked",
+      "connections": [
+        "95397f10-1075-425d-bfb3-fe7cfc29aaa0",
+        "9a44e160-fb41-4f04-9a3f-7db8b6bc8382",
+        "9629a76b-83f0-4122-a736-4ce84aa89e54"
+      ],
+      "description": "This is a shop room at level 8."
+    },
+    {
+      "id": "97c4f53f-8e25-4db1-9d4e-8a5259516b16",
+      "type": "combat",
+      "level": 8,
+      "state": "locked",
+      "connections": [
+        "7e796414-46ca-4cb7-81c9-e134fbbb520b",
+        "6d2c209d-fb0c-4aac-85b8-8e0354d5e8b6"
+      ],
+      "description": "This is a combat room at level 8."
+    },
+    {
+      "id": "b4770461-37e7-4e69-8e94-9b098a82bc5e",
+      "type": "elite",
+      "level": 8,
+      "state": "locked",
+      "connections": [
+        "7e796414-46ca-4cb7-81c9-e134fbbb520b",
+        "a3695556-0df6-49a3-a10e-7ca01fbf758d"
+      ],
+      "description": "This is a elite room at level 8."
+    },
+    {
+      "id": "a3695556-0df6-49a3-a10e-7ca01fbf758d",
+      "type": "rest",
+      "level": 9,
+      "state": "locked",
+      "connections": [
+        "b4770461-37e7-4e69-8e94-9b098a82bc5e",
+        "d68303b0-4864-4bc4-ad7f-81eaf06d5cdb"
+      ],
+      "description": "This is a rest room at level 9."
+    },
+    {
+      "id": "9629a76b-83f0-4122-a736-4ce84aa89e54",
+      "type": "combat",
+      "level": 9,
+      "state": "locked",
+      "connections": [
+        "f4107624-3442-4d14-9752-8e81470affd2",
+        "d68303b0-4864-4bc4-ad7f-81eaf06d5cdb",
+        "525ac202-7b61-4965-80ed-34747bb33f63"
+      ],
+      "description": "This is a combat room at level 9."
+    },
+    {
+      "id": "6d2c209d-fb0c-4aac-85b8-8e0354d5e8b6",
+      "type": "combat",
+      "level": 9,
+      "state": "locked",
+      "connections": [
+        "97c4f53f-8e25-4db1-9d4e-8a5259516b16",
+        "b98168a9-d3ca-40a6-ad3b-02a02f009ab5"
+      ],
+      "description": "This is a combat room at level 9."
+    },
+    {
+      "id": "d68303b0-4864-4bc4-ad7f-81eaf06d5cdb",
+      "type": "combat",
+      "level": 10,
+      "state": "locked",
+      "connections": [
+        "a3695556-0df6-49a3-a10e-7ca01fbf758d",
+        "9629a76b-83f0-4122-a736-4ce84aa89e54",
+        "fb5c42c5-1c91-484a-bd92-17a8c7cf1918",
+        "604a1b37-df84-4c6d-96b5-6de66fde65c0",
+        "a0551059-b06d-4fa3-a73b-0b60a5ce1916"
+      ],
+      "description": "This is a combat room at level 10."
+    },
+    {
+      "id": "b98168a9-d3ca-40a6-ad3b-02a02f009ab5",
+      "type": "puzzle",
+      "level": 10,
+      "state": "locked",
+      "connections": [
+        "6d2c209d-fb0c-4aac-85b8-8e0354d5e8b6",
+        "fb5c42c5-1c91-484a-bd92-17a8c7cf1918"
+      ],
+      "description": "This is a puzzle room at level 10."
+    },
+    {
+      "id": "525ac202-7b61-4965-80ed-34747bb33f63",
+      "type": "combat",
+      "level": 10,
+      "state": "locked",
+      "connections": [
+        "9629a76b-83f0-4122-a736-4ce84aa89e54",
+        "539ef0ff-d091-458c-af27-c2a8d9f20c93"
+      ],
+      "description": "This is a combat room at level 10."
+    },
+    {
+      "id": "fb5c42c5-1c91-484a-bd92-17a8c7cf1918",
+      "type": "elite",
+      "level": 11,
+      "state": "locked",
+      "connections": [
+        "d68303b0-4864-4bc4-ad7f-81eaf06d5cdb",
+        "b98168a9-d3ca-40a6-ad3b-02a02f009ab5",
+        "ae737283-43fd-4325-a9e4-b08cdc50eb16"
+      ],
+      "description": "This is a elite room at level 11."
+    },
+    {
+      "id": "539ef0ff-d091-458c-af27-c2a8d9f20c93",
+      "type": "combat",
+      "level": 11,
+      "state": "locked",
+      "connections": [
+        "525ac202-7b61-4965-80ed-34747bb33f63",
+        "deacfe1c-e33f-49ca-b13d-bff93dd6c142"
+      ],
+      "description": "This is a combat room at level 11."
+    },
+    {
+      "id": "a0551059-b06d-4fa3-a73b-0b60a5ce1916",
+      "type": "combat",
+      "level": 11,
+      "state": "locked",
+      "connections": [
+        "d68303b0-4864-4bc4-ad7f-81eaf06d5cdb",
+        "deacfe1c-e33f-49ca-b13d-bff93dd6c142",
+        "4b9624ac-3836-4e59-9707-48235ead8c87"
+      ],
+      "description": "This is a combat room at level 11."
+    },
+    {
+      "id": "604a1b37-df84-4c6d-96b5-6de66fde65c0",
+      "type": "elite",
+      "level": 11,
+      "state": "locked",
+      "connections": [
+        "d68303b0-4864-4bc4-ad7f-81eaf06d5cdb",
+        "240a0cd3-17f2-49ac-be29-8a10ec5737dc"
+      ],
+      "description": "This is a elite room at level 11."
+    },
+    {
+      "id": "4b9624ac-3836-4e59-9707-48235ead8c87",
+      "type": "combat",
+      "level": 12,
+      "state": "locked",
+      "connections": [
+        "a0551059-b06d-4fa3-a73b-0b60a5ce1916",
+        "68b1b603-df78-47ff-a058-422ff7983b59",
+        "8422ebc0-f655-49cd-abd2-b564cfa3aec1"
+      ],
+      "description": "This is a combat room at level 12."
+    },
+    {
+      "id": "240a0cd3-17f2-49ac-be29-8a10ec5737dc",
+      "type": "combat",
+      "level": 12,
+      "state": "locked",
+      "connections": [
+        "604a1b37-df84-4c6d-96b5-6de66fde65c0",
+        "68b1b603-df78-47ff-a058-422ff7983b59",
+        "c1f6c746-95bc-4367-82a7-a6beb4d8344e"
+      ],
+      "description": "This is a combat room at level 12."
+    },
+    {
+      "id": "deacfe1c-e33f-49ca-b13d-bff93dd6c142",
+      "type": "combat",
+      "level": 12,
+      "state": "locked",
+      "connections": [
+        "539ef0ff-d091-458c-af27-c2a8d9f20c93",
+        "a0551059-b06d-4fa3-a73b-0b60a5ce1916",
+        "912e7a44-fe0b-4b0f-9872-565c3b86e58d",
+        "8256536f-bb8f-4d1c-9241-becfb495e7e2"
+      ],
+      "description": "This is a combat room at level 12."
+    },
+    {
+      "id": "ae737283-43fd-4325-a9e4-b08cdc50eb16",
+      "type": "combat",
+      "level": 12,
+      "state": "locked",
+      "connections": [
+        "fb5c42c5-1c91-484a-bd92-17a8c7cf1918",
+        "c1f6c746-95bc-4367-82a7-a6beb4d8344e",
+        "68b1b603-df78-47ff-a058-422ff7983b59"
+      ],
+      "description": "This is a combat room at level 12."
+    },
+    {
+      "id": "912e7a44-fe0b-4b0f-9872-565c3b86e58d",
+      "type": "combat",
+      "level": 13,
+      "state": "locked",
+      "connections": [
+        "deacfe1c-e33f-49ca-b13d-bff93dd6c142",
+        "9144b853-b228-42f7-962a-622727feae36",
+        "264258d6-e0b6-41b7-945a-38d14b8cc3d8"
+      ],
+      "description": "This is a combat room at level 13."
+    },
+    {
+      "id": "8422ebc0-f655-49cd-abd2-b564cfa3aec1",
+      "type": "combat",
+      "level": 13,
+      "state": "locked",
+      "connections": [
+        "4b9624ac-3836-4e59-9707-48235ead8c87",
+        "14a05f6e-d74f-4a10-8634-56550e2f481a",
+        "9144b853-b228-42f7-962a-622727feae36"
+      ],
+      "description": "This is a combat room at level 13."
+    },
+    {
+      "id": "68b1b603-df78-47ff-a058-422ff7983b59",
+      "type": "treasure",
+      "level": 13,
+      "state": "locked",
+      "connections": [
+        "4b9624ac-3836-4e59-9707-48235ead8c87",
+        "240a0cd3-17f2-49ac-be29-8a10ec5737dc",
+        "ae737283-43fd-4325-a9e4-b08cdc50eb16",
+        "5fc69435-2a97-45a4-bd14-16bfca363397"
+      ],
+      "description": "This is a treasure room at level 13."
+    },
+    {
+      "id": "c1f6c746-95bc-4367-82a7-a6beb4d8344e",
+      "type": "elite",
+      "level": 13,
+      "state": "locked",
+      "connections": [
+        "ae737283-43fd-4325-a9e4-b08cdc50eb16",
+        "240a0cd3-17f2-49ac-be29-8a10ec5737dc",
+        "2f9d3e0d-e2b2-431c-93f3-b9aaefa3ca89"
+      ],
+      "description": "This is a elite room at level 13."
+    },
+    {
+      "id": "8256536f-bb8f-4d1c-9241-becfb495e7e2",
+      "type": "combat",
+      "level": 13,
+      "state": "locked",
+      "connections": [
+        "deacfe1c-e33f-49ca-b13d-bff93dd6c142",
+        "264258d6-e0b6-41b7-945a-38d14b8cc3d8"
+      ],
+      "description": "This is a combat room at level 13."
+    },
+    {
+      "id": "5fc69435-2a97-45a4-bd14-16bfca363397",
+      "type": "puzzle",
+      "level": 14,
+      "state": "locked",
+      "connections": [
+        "68b1b603-df78-47ff-a058-422ff7983b59",
+        "44daaba2-d80e-4fec-b544-f91d670e6ed9"
+      ],
+      "description": "This is a puzzle room at level 14."
+    },
+    {
+      "id": "9144b853-b228-42f7-962a-622727feae36",
+      "type": "combat",
+      "level": 14,
+      "state": "locked",
+      "connections": [
+        "912e7a44-fe0b-4b0f-9872-565c3b86e58d",
+        "8422ebc0-f655-49cd-abd2-b564cfa3aec1",
+        "e6031dbb-586d-4e44-82f7-633c3e0933ad"
+      ],
+      "description": "This is a combat room at level 14."
+    },
+    {
+      "id": "14a05f6e-d74f-4a10-8634-56550e2f481a",
+      "type": "event",
+      "level": 14,
+      "state": "locked",
+      "connections": [
+        "8422ebc0-f655-49cd-abd2-b564cfa3aec1",
+        "44daaba2-d80e-4fec-b544-f91d670e6ed9",
+        "7fa6b526-94e3-4a3a-bd73-2a106c44e293"
+      ],
+      "description": "This is a event room at level 14."
+    },
+    {
+      "id": "264258d6-e0b6-41b7-945a-38d14b8cc3d8",
+      "type": "treasure",
+      "level": 14,
+      "state": "locked",
+      "connections": [
+        "8256536f-bb8f-4d1c-9241-becfb495e7e2",
+        "912e7a44-fe0b-4b0f-9872-565c3b86e58d",
+        "44daaba2-d80e-4fec-b544-f91d670e6ed9"
+      ],
+      "description": "This is a treasure room at level 14."
+    },
+    {
+      "id": "2f9d3e0d-e2b2-431c-93f3-b9aaefa3ca89",
+      "type": "shop",
+      "level": 14,
+      "state": "locked",
+      "connections": [
+        "c1f6c746-95bc-4367-82a7-a6beb4d8344e",
+        "dc623656-4db9-43b9-81af-4f86dd867a8a"
+      ],
+      "description": "This is a combat room at level 14."
+    },
+    {
+      "id": "7fa6b526-94e3-4a3a-bd73-2a106c44e293",
+      "type": "event",
+      "level": 15,
+      "state": "locked",
+      "connections": [
+        "14a05f6e-d74f-4a10-8634-56550e2f481a",
+        "a22c2184-7f0b-4ee7-91e0-788089ebabd8"
+      ],
+      "description": "This is a event room at level 15."
+    },
+    {
+      "id": "e6031dbb-586d-4e44-82f7-633c3e0933ad",
+      "type": "event",
+      "level": 15,
+      "state": "locked",
+      "connections": [
+        "9144b853-b228-42f7-962a-622727feae36",
+        "c1106c71-97aa-4460-b955-20ace3eef88c"
+      ],
+      "description": "This is a event room at level 15."
+    },
+    {
+      "id": "dc623656-4db9-43b9-81af-4f86dd867a8a",
+      "type": "rest",
+      "level": 15,
+      "state": "locked",
+      "connections": [
+        "2f9d3e0d-e2b2-431c-93f3-b9aaefa3ca89",
+        "a60f5ccd-8547-494a-a6a2-63ba9dd5e6fc"
+      ],
+      "description": "This is a combat room at level 15."
+    },
+    {
+      "id": "44daaba2-d80e-4fec-b544-f91d670e6ed9",
+      "type": "puzzle",
+      "level": 15,
+      "state": "locked",
+      "connections": [
+        "5fc69435-2a97-45a4-bd14-16bfca363397",
+        "14a05f6e-d74f-4a10-8634-56550e2f481a",
+        "264258d6-e0b6-41b7-945a-38d14b8cc3d8",
+        "a60f5ccd-8547-494a-a6a2-63ba9dd5e6fc"
+      ],
+      "description": "This is a puzzle room at level 15."
+    },
+    {
+      "id": "a60f5ccd-8547-494a-a6a2-63ba9dd5e6fc",
+      "type": "combat",
+      "level": 16,
+      "state": "locked",
+      "connections": [
+        "dc623656-4db9-43b9-81af-4f86dd867a8a",
+        "44daaba2-d80e-4fec-b544-f91d670e6ed9",
+        "bf3855f5-a892-4222-b4f2-844877dbce48",
+        "1e0524be-3891-4c4c-b820-9c52512996cb"
+      ],
+      "description": "This is a combat room at level 16."
+    },
+    {
+      "id": "a22c2184-7f0b-4ee7-91e0-788089ebabd8",
+      "type": "combat",
+      "level": 16,
+      "state": "locked",
+      "connections": [
+        "7fa6b526-94e3-4a3a-bd73-2a106c44e293",
+        "1e0524be-3891-4c4c-b820-9c52512996cb"
+      ],
+      "description": "This is a combat room at level 16."
+    },
+    {
+      "id": "c1106c71-97aa-4460-b955-20ace3eef88c",
+      "type": "combat",
+      "level": 16,
+      "state": "locked",
+      "connections": [
+        "e6031dbb-586d-4e44-82f7-633c3e0933ad",
+        "1e0524be-3891-4c4c-b820-9c52512996cb",
+        "f9a1960f-c565-4a18-a459-8ad6ae176310"
+      ],
+      "description": "This is a combat room at level 16."
+    },
+    {
+      "id": "f9a1960f-c565-4a18-a459-8ad6ae176310",
+      "type": "treasure",
+      "level": 17,
+      "state": "locked",
+      "connections": [
+        "c1106c71-97aa-4460-b955-20ace3eef88c",
+        "74599033-4586-4a86-adda-c87c6f412756"
+      ],
+      "description": "This is a treasure room at level 17."
+    },
+    {
+      "id": "1e0524be-3891-4c4c-b820-9c52512996cb",
+      "type": "event",
+      "level": 17,
+      "state": "locked",
+      "connections": [
+        "a22c2184-7f0b-4ee7-91e0-788089ebabd8",
+        "c1106c71-97aa-4460-b955-20ace3eef88c",
+        "a60f5ccd-8547-494a-a6a2-63ba9dd5e6fc",
+        "74599033-4586-4a86-adda-c87c6f412756"
+      ],
+      "description": "This is a event room at level 17."
+    },
+    {
+      "id": "bf3855f5-a892-4222-b4f2-844877dbce48",
+      "type": "elite",
+      "level": 17,
+      "state": "locked",
+      "connections": [
+        "a60f5ccd-8547-494a-a6a2-63ba9dd5e6fc",
+        "74599033-4586-4a86-adda-c87c6f412756"
+      ],
+      "description": "This is a elite room at level 17."
+    },
+    {
+      "id": "74599033-4586-4a86-adda-c87c6f412756",
+      "type": "combat",
+      "level": 18,
+      "state": "locked",
+      "connections": [
+        "f9a1960f-c565-4a18-a459-8ad6ae176310",
+        "1e0524be-3891-4c4c-b820-9c52512996cb",
+        "bf3855f5-a892-4222-b4f2-844877dbce48",
+        "cb92d884-d92c-48bf-a36c-f24461156493"
+      ],
+      "description": "This is a combat room at level 18."
+    },
+    {
+      "id": "cb92d884-d92c-48bf-a36c-f24461156493",
+      "type": "combat",
+      "level": 19,
+      "state": "locked",
+      "connections": [
+        "74599033-4586-4a86-adda-c87c6f412756",
+        "314831fd-e074-47c9-8cfb-33b2e77c83c9"
+      ],
+      "description": "This is a combat room at level 19."
+    },
+    {
+      "id": "314831fd-e074-47c9-8cfb-33b2e77c83c9",
+      "type": "boss",
+      "level": 20,
+      "state": "locked",
+      "connections": [
+        "cb92d884-d92c-48bf-a36c-f24461156493"
+      ],
+      "description": "This is a boss room at level 20."
+    }
+  ],
+  "layers": [
+    {
+      "level": 1,
+      "rooms": [
+        {
+          "id": "5a652d22-f20a-4d9e-b58a-1a71c750a86e",
+          "type": "entrance",
+          "level": 1,
+          "state": "available",
+          "connections": [
+            "d97aecf8-faa3-4aca-b004-15dfaa8398f7"
+          ],
+          "description": "This is a entrance room at level 1."
+        }
+      ]
+    },
+    {
+      "level": 2,
+      "rooms": [
+        {
+          "id": "d97aecf8-faa3-4aca-b004-15dfaa8398f7",
+          "type": "combat",
+          "level": 2,
+          "state": "locked",
+          "connections": [
+            "5a652d22-f20a-4d9e-b58a-1a71c750a86e",
+            "0d377b73-9619-4c43-9db4-6e2863a345d2"
+          ],
+          "description": "This is a combat room at level 2."
+        }
+      ]
+    },
+    {
+      "level": 3,
+      "rooms": [
+        {
+          "id": "0d377b73-9619-4c43-9db4-6e2863a345d2",
+          "type": "combat",
+          "level": 3,
+          "state": "locked",
+          "connections": [
+            "d97aecf8-faa3-4aca-b004-15dfaa8398f7",
+            "ecf8e2f9-ba8f-4f3f-a4cb-81a0be09b716"
+          ],
+          "description": "This is a combat room at level 3."
+        }
+      ]
+    },
+    {
+      "level": 4,
+      "rooms": [
+        {
+          "id": "ecf8e2f9-ba8f-4f3f-a4cb-81a0be09b716",
+          "type": "rest",
+          "level": 4,
+          "state": "locked",
+          "connections": [
+            "0d377b73-9619-4c43-9db4-6e2863a345d2",
+            "45ae3f6f-a805-427d-95ed-94706d61dcf0",
+            "766becef-2dab-41b7-b5c4-6e84fbf04ff7"
+          ],
+          "description": "This is a rest room at level 4."
+        }
+      ]
+    },
+    {
+      "level": 5,
+      "rooms": [
+        {
+          "id": "45ae3f6f-a805-427d-95ed-94706d61dcf0",
+          "type": "rest",
+          "level": 5,
+          "state": "locked",
+          "connections": [
+            "ecf8e2f9-ba8f-4f3f-a4cb-81a0be09b716",
+            "d378a72c-89a7-4489-9d9b-cc211197dd2c",
+            "183da047-70af-42bc-968d-8b07c60197cc"
+          ],
+          "description": "This is a combat room at level 5."
+        },
+        {
+          "id": "766becef-2dab-41b7-b5c4-6e84fbf04ff7",
+          "type": "combat",
+          "level": 5,
+          "state": "locked",
+          "connections": [
+            "ecf8e2f9-ba8f-4f3f-a4cb-81a0be09b716",
+            "28e33653-aa08-40bb-bdb5-3c2104ab0b48",
+            "183da047-70af-42bc-968d-8b07c60197cc"
+          ],
+          "description": "This is a combat room at level 5."
+        }
+      ]
+    },
+    {
+      "level": 6,
+      "rooms": [
+        {
+          "id": "183da047-70af-42bc-968d-8b07c60197cc",
+          "type": "treasure",
+          "level": 6,
+          "state": "locked",
+          "connections": [
+            "45ae3f6f-a805-427d-95ed-94706d61dcf0",
+            "766becef-2dab-41b7-b5c4-6e84fbf04ff7",
+            "9a44e160-fb41-4f04-9a3f-7db8b6bc8382"
+          ],
+          "description": "This is a combat room at level 6."
+        },
+        {
+          "id": "28e33653-aa08-40bb-bdb5-3c2104ab0b48",
+          "type": "combat",
+          "level": 6,
+          "state": "locked",
+          "connections": [
+            "766becef-2dab-41b7-b5c4-6e84fbf04ff7",
+            "95397f10-1075-425d-bfb3-fe7cfc29aaa0",
+            "9a44e160-fb41-4f04-9a3f-7db8b6bc8382"
+          ],
+          "description": "This is a combat room at level 6."
+        },
+        {
+          "id": "d378a72c-89a7-4489-9d9b-cc211197dd2c",
+          "type": "combat",
+          "level": 6,
+          "state": "locked",
+          "connections": [
+            "45ae3f6f-a805-427d-95ed-94706d61dcf0",
+            "95397f10-1075-425d-bfb3-fe7cfc29aaa0",
+            "7e796414-46ca-4cb7-81c9-e134fbbb520b"
+          ],
+          "description": "This is a combat room at level 6."
+        }
+      ]
+    },
+    {
+      "level": 7,
+      "rooms": [
+        {
+          "id": "7e796414-46ca-4cb7-81c9-e134fbbb520b",
+          "type": "shop",
+          "level": 7,
+          "state": "locked",
+          "connections": [
+            "d378a72c-89a7-4489-9d9b-cc211197dd2c",
+            "97c4f53f-8e25-4db1-9d4e-8a5259516b16",
+            "b4770461-37e7-4e69-8e94-9b098a82bc5e"
+          ],
+          "description": "This is a shop room at level 7."
+        },
+        {
+          "id": "95397f10-1075-425d-bfb3-fe7cfc29aaa0",
+          "type": "elite",
+          "level": 7,
+          "state": "locked",
+          "connections": [
+            "28e33653-aa08-40bb-bdb5-3c2104ab0b48",
+            "d378a72c-89a7-4489-9d9b-cc211197dd2c",
+            "f4107624-3442-4d14-9752-8e81470affd2"
+          ],
+          "description": "This is a elite room at level 7."
+        },
+        {
+          "id": "9a44e160-fb41-4f04-9a3f-7db8b6bc8382",
+          "type": "combat",
+          "level": 7,
+          "state": "locked",
+          "connections": [
+            "183da047-70af-42bc-968d-8b07c60197cc",
+            "28e33653-aa08-40bb-bdb5-3c2104ab0b48",
+            "f4107624-3442-4d14-9752-8e81470affd2"
+          ],
+          "description": "This is a combat room at level 7."
+        }
+      ]
+    },
+    {
+      "level": 8,
+      "rooms": [
+        {
+          "id": "f4107624-3442-4d14-9752-8e81470affd2",
+          "type": "shop",
+          "level": 8,
+          "state": "locked",
+          "connections": [
+            "95397f10-1075-425d-bfb3-fe7cfc29aaa0",
+            "9a44e160-fb41-4f04-9a3f-7db8b6bc8382",
+            "9629a76b-83f0-4122-a736-4ce84aa89e54"
+          ],
+          "description": "This is a shop room at level 8."
+        },
+        {
+          "id": "97c4f53f-8e25-4db1-9d4e-8a5259516b16",
+          "type": "combat",
+          "level": 8,
+          "state": "locked",
+          "connections": [
+            "7e796414-46ca-4cb7-81c9-e134fbbb520b",
+            "6d2c209d-fb0c-4aac-85b8-8e0354d5e8b6"
+          ],
+          "description": "This is a combat room at level 8."
+        },
+        {
+          "id": "b4770461-37e7-4e69-8e94-9b098a82bc5e",
+          "type": "elite",
+          "level": 8,
+          "state": "locked",
+          "connections": [
+            "7e796414-46ca-4cb7-81c9-e134fbbb520b",
+            "a3695556-0df6-49a3-a10e-7ca01fbf758d"
+          ],
+          "description": "This is a elite room at level 8."
+        }
+      ]
+    },
+    {
+      "level": 9,
+      "rooms": [
+        {
+          "id": "a3695556-0df6-49a3-a10e-7ca01fbf758d",
+          "type": "rest",
+          "level": 9,
+          "state": "locked",
+          "connections": [
+            "b4770461-37e7-4e69-8e94-9b098a82bc5e",
+            "d68303b0-4864-4bc4-ad7f-81eaf06d5cdb"
+          ],
+          "description": "This is a rest room at level 9."
+        },
+        {
+          "id": "9629a76b-83f0-4122-a736-4ce84aa89e54",
+          "type": "combat",
+          "level": 9,
+          "state": "locked",
+          "connections": [
+            "f4107624-3442-4d14-9752-8e81470affd2",
+            "d68303b0-4864-4bc4-ad7f-81eaf06d5cdb",
+            "525ac202-7b61-4965-80ed-34747bb33f63"
+          ],
+          "description": "This is a combat room at level 9."
+        },
+        {
+          "id": "6d2c209d-fb0c-4aac-85b8-8e0354d5e8b6",
+          "type": "combat",
+          "level": 9,
+          "state": "locked",
+          "connections": [
+            "97c4f53f-8e25-4db1-9d4e-8a5259516b16",
+            "b98168a9-d3ca-40a6-ad3b-02a02f009ab5"
+          ],
+          "description": "This is a combat room at level 9."
+        }
+      ]
+    },
+    {
+      "level": 10,
+      "rooms": [
+        {
+          "id": "d68303b0-4864-4bc4-ad7f-81eaf06d5cdb",
+          "type": "combat",
+          "level": 10,
+          "state": "locked",
+          "connections": [
+            "a3695556-0df6-49a3-a10e-7ca01fbf758d",
+            "9629a76b-83f0-4122-a736-4ce84aa89e54",
+            "fb5c42c5-1c91-484a-bd92-17a8c7cf1918",
+            "604a1b37-df84-4c6d-96b5-6de66fde65c0",
+            "a0551059-b06d-4fa3-a73b-0b60a5ce1916"
+          ],
+          "description": "This is a combat room at level 10."
+        },
+        {
+          "id": "b98168a9-d3ca-40a6-ad3b-02a02f009ab5",
+          "type": "puzzle",
+          "level": 10,
+          "state": "locked",
+          "connections": [
+            "6d2c209d-fb0c-4aac-85b8-8e0354d5e8b6",
+            "fb5c42c5-1c91-484a-bd92-17a8c7cf1918"
+          ],
+          "description": "This is a puzzle room at level 10."
+        },
+        {
+          "id": "525ac202-7b61-4965-80ed-34747bb33f63",
+          "type": "combat",
+          "level": 10,
+          "state": "locked",
+          "connections": [
+            "9629a76b-83f0-4122-a736-4ce84aa89e54",
+            "539ef0ff-d091-458c-af27-c2a8d9f20c93"
+          ],
+          "description": "This is a combat room at level 10."
+        }
+      ]
+    },
+    {
+      "level": 11,
+      "rooms": [
+        {
+          "id": "fb5c42c5-1c91-484a-bd92-17a8c7cf1918",
+          "type": "elite",
+          "level": 11,
+          "state": "locked",
+          "connections": [
+            "d68303b0-4864-4bc4-ad7f-81eaf06d5cdb",
+            "b98168a9-d3ca-40a6-ad3b-02a02f009ab5",
+            "ae737283-43fd-4325-a9e4-b08cdc50eb16"
+          ],
+          "description": "This is a elite room at level 11."
+        },
+        {
+          "id": "539ef0ff-d091-458c-af27-c2a8d9f20c93",
+          "type": "combat",
+          "level": 11,
+          "state": "locked",
+          "connections": [
+            "525ac202-7b61-4965-80ed-34747bb33f63",
+            "deacfe1c-e33f-49ca-b13d-bff93dd6c142"
+          ],
+          "description": "This is a combat room at level 11."
+        },
+        {
+          "id": "a0551059-b06d-4fa3-a73b-0b60a5ce1916",
+          "type": "combat",
+          "level": 11,
+          "state": "locked",
+          "connections": [
+            "d68303b0-4864-4bc4-ad7f-81eaf06d5cdb",
+            "deacfe1c-e33f-49ca-b13d-bff93dd6c142",
+            "4b9624ac-3836-4e59-9707-48235ead8c87"
+          ],
+          "description": "This is a combat room at level 11."
+        },
+        {
+          "id": "604a1b37-df84-4c6d-96b5-6de66fde65c0",
+          "type": "elite",
+          "level": 11,
+          "state": "locked",
+          "connections": [
+            "d68303b0-4864-4bc4-ad7f-81eaf06d5cdb",
+            "240a0cd3-17f2-49ac-be29-8a10ec5737dc"
+          ],
+          "description": "This is a elite room at level 11."
+        }
+      ]
+    },
+    {
+      "level": 12,
+      "rooms": [
+        {
+          "id": "4b9624ac-3836-4e59-9707-48235ead8c87",
+          "type": "combat",
+          "level": 12,
+          "state": "locked",
+          "connections": [
+            "a0551059-b06d-4fa3-a73b-0b60a5ce1916",
+            "68b1b603-df78-47ff-a058-422ff7983b59",
+            "8422ebc0-f655-49cd-abd2-b564cfa3aec1"
+          ],
+          "description": "This is a combat room at level 12."
+        },
+        {
+          "id": "240a0cd3-17f2-49ac-be29-8a10ec5737dc",
+          "type": "combat",
+          "level": 12,
+          "state": "locked",
+          "connections": [
+            "604a1b37-df84-4c6d-96b5-6de66fde65c0",
+            "68b1b603-df78-47ff-a058-422ff7983b59",
+            "c1f6c746-95bc-4367-82a7-a6beb4d8344e"
+          ],
+          "description": "This is a combat room at level 12."
+        },
+        {
+          "id": "deacfe1c-e33f-49ca-b13d-bff93dd6c142",
+          "type": "combat",
+          "level": 12,
+          "state": "locked",
+          "connections": [
+            "539ef0ff-d091-458c-af27-c2a8d9f20c93",
+            "a0551059-b06d-4fa3-a73b-0b60a5ce1916",
+            "912e7a44-fe0b-4b0f-9872-565c3b86e58d",
+            "8256536f-bb8f-4d1c-9241-becfb495e7e2"
+          ],
+          "description": "This is a combat room at level 12."
+        },
+        {
+          "id": "ae737283-43fd-4325-a9e4-b08cdc50eb16",
+          "type": "combat",
+          "level": 12,
+          "state": "locked",
+          "connections": [
+            "fb5c42c5-1c91-484a-bd92-17a8c7cf1918",
+            "c1f6c746-95bc-4367-82a7-a6beb4d8344e",
+            "68b1b603-df78-47ff-a058-422ff7983b59"
+          ],
+          "description": "This is a combat room at level 12."
+        }
+      ]
+    },
+    {
+      "level": 13,
+      "rooms": [
+        {
+          "id": "912e7a44-fe0b-4b0f-9872-565c3b86e58d",
+          "type": "combat",
+          "level": 13,
+          "state": "locked",
+          "connections": [
+            "deacfe1c-e33f-49ca-b13d-bff93dd6c142",
+            "9144b853-b228-42f7-962a-622727feae36",
+            "264258d6-e0b6-41b7-945a-38d14b8cc3d8"
+          ],
+          "description": "This is a combat room at level 13."
+        },
+        {
+          "id": "8422ebc0-f655-49cd-abd2-b564cfa3aec1",
+          "type": "combat",
+          "level": 13,
+          "state": "locked",
+          "connections": [
+            "4b9624ac-3836-4e59-9707-48235ead8c87",
+            "14a05f6e-d74f-4a10-8634-56550e2f481a",
+            "9144b853-b228-42f7-962a-622727feae36"
+          ],
+          "description": "This is a combat room at level 13."
+        },
+        {
+          "id": "68b1b603-df78-47ff-a058-422ff7983b59",
+          "type": "treasure",
+          "level": 13,
+          "state": "locked",
+          "connections": [
+            "4b9624ac-3836-4e59-9707-48235ead8c87",
+            "240a0cd3-17f2-49ac-be29-8a10ec5737dc",
+            "ae737283-43fd-4325-a9e4-b08cdc50eb16",
+            "5fc69435-2a97-45a4-bd14-16bfca363397"
+          ],
+          "description": "This is a treasure room at level 13."
+        },
+        {
+          "id": "c1f6c746-95bc-4367-82a7-a6beb4d8344e",
+          "type": "elite",
+          "level": 13,
+          "state": "locked",
+          "connections": [
+            "ae737283-43fd-4325-a9e4-b08cdc50eb16",
+            "240a0cd3-17f2-49ac-be29-8a10ec5737dc",
+            "2f9d3e0d-e2b2-431c-93f3-b9aaefa3ca89"
+          ],
+          "description": "This is a elite room at level 13."
+        },
+        {
+          "id": "8256536f-bb8f-4d1c-9241-becfb495e7e2",
+          "type": "combat",
+          "level": 13,
+          "state": "locked",
+          "connections": [
+            "deacfe1c-e33f-49ca-b13d-bff93dd6c142",
+            "264258d6-e0b6-41b7-945a-38d14b8cc3d8"
+          ],
+          "description": "This is a combat room at level 13."
+        }
+      ]
+    },
+    {
+      "level": 14,
+      "rooms": [
+        {
+          "id": "5fc69435-2a97-45a4-bd14-16bfca363397",
+          "type": "puzzle",
+          "level": 14,
+          "state": "locked",
+          "connections": [
+            "68b1b603-df78-47ff-a058-422ff7983b59",
+            "44daaba2-d80e-4fec-b544-f91d670e6ed9"
+          ],
+          "description": "This is a puzzle room at level 14."
+        },
+        {
+          "id": "9144b853-b228-42f7-962a-622727feae36",
+          "type": "combat",
+          "level": 14,
+          "state": "locked",
+          "connections": [
+            "912e7a44-fe0b-4b0f-9872-565c3b86e58d",
+            "8422ebc0-f655-49cd-abd2-b564cfa3aec1",
+            "e6031dbb-586d-4e44-82f7-633c3e0933ad"
+          ],
+          "description": "This is a combat room at level 14."
+        },
+        {
+          "id": "14a05f6e-d74f-4a10-8634-56550e2f481a",
+          "type": "event",
+          "level": 14,
+          "state": "locked",
+          "connections": [
+            "8422ebc0-f655-49cd-abd2-b564cfa3aec1",
+            "44daaba2-d80e-4fec-b544-f91d670e6ed9",
+            "7fa6b526-94e3-4a3a-bd73-2a106c44e293"
+          ],
+          "description": "This is a event room at level 14."
+        },
+        {
+          "id": "264258d6-e0b6-41b7-945a-38d14b8cc3d8",
+          "type": "treasure",
+          "level": 14,
+          "state": "locked",
+          "connections": [
+            "8256536f-bb8f-4d1c-9241-becfb495e7e2",
+            "912e7a44-fe0b-4b0f-9872-565c3b86e58d",
+            "44daaba2-d80e-4fec-b544-f91d670e6ed9"
+          ],
+          "description": "This is a treasure room at level 14."
+        },
+        {
+          "id": "2f9d3e0d-e2b2-431c-93f3-b9aaefa3ca89",
+          "type": "shop",
+          "level": 14,
+          "state": "locked",
+          "connections": [
+            "c1f6c746-95bc-4367-82a7-a6beb4d8344e",
+            "dc623656-4db9-43b9-81af-4f86dd867a8a"
+          ],
+          "description": "This is a combat room at level 14."
+        }
+      ]
+    },
+    {
+      "level": 15,
+      "rooms": [
+        {
+          "id": "7fa6b526-94e3-4a3a-bd73-2a106c44e293",
+          "type": "event",
+          "level": 15,
+          "state": "locked",
+          "connections": [
+            "14a05f6e-d74f-4a10-8634-56550e2f481a",
+            "a22c2184-7f0b-4ee7-91e0-788089ebabd8"
+          ],
+          "description": "This is a event room at level 15."
+        },
+        {
+          "id": "e6031dbb-586d-4e44-82f7-633c3e0933ad",
+          "type": "event",
+          "level": 15,
+          "state": "locked",
+          "connections": [
+            "9144b853-b228-42f7-962a-622727feae36",
+            "c1106c71-97aa-4460-b955-20ace3eef88c"
+          ],
+          "description": "This is a event room at level 15."
+        },
+        {
+          "id": "dc623656-4db9-43b9-81af-4f86dd867a8a",
+          "type": "rest",
+          "level": 15,
+          "state": "locked",
+          "connections": [
+            "2f9d3e0d-e2b2-431c-93f3-b9aaefa3ca89",
+            "a60f5ccd-8547-494a-a6a2-63ba9dd5e6fc"
+          ],
+          "description": "This is a combat room at level 15."
+        },
+        {
+          "id": "44daaba2-d80e-4fec-b544-f91d670e6ed9",
+          "type": "puzzle",
+          "level": 15,
+          "state": "locked",
+          "connections": [
+            "5fc69435-2a97-45a4-bd14-16bfca363397",
+            "14a05f6e-d74f-4a10-8634-56550e2f481a",
+            "264258d6-e0b6-41b7-945a-38d14b8cc3d8",
+            "a60f5ccd-8547-494a-a6a2-63ba9dd5e6fc"
+          ],
+          "description": "This is a puzzle room at level 15."
+        }
+      ]
+    },
+    {
+      "level": 16,
+      "rooms": [
+        {
+          "id": "a60f5ccd-8547-494a-a6a2-63ba9dd5e6fc",
+          "type": "combat",
+          "level": 16,
+          "state": "locked",
+          "connections": [
+            "dc623656-4db9-43b9-81af-4f86dd867a8a",
+            "44daaba2-d80e-4fec-b544-f91d670e6ed9",
+            "bf3855f5-a892-4222-b4f2-844877dbce48",
+            "1e0524be-3891-4c4c-b820-9c52512996cb"
+          ],
+          "description": "This is a combat room at level 16."
+        },
+        {
+          "id": "a22c2184-7f0b-4ee7-91e0-788089ebabd8",
+          "type": "combat",
+          "level": 16,
+          "state": "locked",
+          "connections": [
+            "7fa6b526-94e3-4a3a-bd73-2a106c44e293",
+            "1e0524be-3891-4c4c-b820-9c52512996cb"
+          ],
+          "description": "This is a combat room at level 16."
+        },
+        {
+          "id": "c1106c71-97aa-4460-b955-20ace3eef88c",
+          "type": "combat",
+          "level": 16,
+          "state": "locked",
+          "connections": [
+            "e6031dbb-586d-4e44-82f7-633c3e0933ad",
+            "1e0524be-3891-4c4c-b820-9c52512996cb",
+            "f9a1960f-c565-4a18-a459-8ad6ae176310"
+          ],
+          "description": "This is a combat room at level 16."
+        }
+      ]
+    },
+    {
+      "level": 17,
+      "rooms": [
+        {
+          "id": "f9a1960f-c565-4a18-a459-8ad6ae176310",
+          "type": "treasure",
+          "level": 17,
+          "state": "locked",
+          "connections": [
+            "c1106c71-97aa-4460-b955-20ace3eef88c",
+            "74599033-4586-4a86-adda-c87c6f412756"
+          ],
+          "description": "This is a treasure room at level 17."
+        },
+        {
+          "id": "1e0524be-3891-4c4c-b820-9c52512996cb",
+          "type": "event",
+          "level": 17,
+          "state": "locked",
+          "connections": [
+            "a22c2184-7f0b-4ee7-91e0-788089ebabd8",
+            "c1106c71-97aa-4460-b955-20ace3eef88c",
+            "a60f5ccd-8547-494a-a6a2-63ba9dd5e6fc",
+            "74599033-4586-4a86-adda-c87c6f412756"
+          ],
+          "description": "This is a event room at level 17."
+        },
+        {
+          "id": "bf3855f5-a892-4222-b4f2-844877dbce48",
+          "type": "elite",
+          "level": 17,
+          "state": "locked",
+          "connections": [
+            "a60f5ccd-8547-494a-a6a2-63ba9dd5e6fc",
+            "74599033-4586-4a86-adda-c87c6f412756"
+          ],
+          "description": "This is a elite room at level 17."
+        }
+      ]
+    },
+    {
+      "level": 18,
+      "rooms": [
+        {
+          "id": "74599033-4586-4a86-adda-c87c6f412756",
+          "type": "combat",
+          "level": 18,
+          "state": "locked",
+          "connections": [
+            "f9a1960f-c565-4a18-a459-8ad6ae176310",
+            "1e0524be-3891-4c4c-b820-9c52512996cb",
+            "bf3855f5-a892-4222-b4f2-844877dbce48",
+            "cb92d884-d92c-48bf-a36c-f24461156493"
+          ],
+          "description": "This is a combat room at level 18."
+        }
+      ]
+    },
+    {
+      "level": 19,
+      "rooms": [
+        {
+          "id": "cb92d884-d92c-48bf-a36c-f24461156493",
+          "type": "combat",
+          "level": 19,
+          "state": "locked",
+          "connections": [
+            "74599033-4586-4a86-adda-c87c6f412756",
+            "314831fd-e074-47c9-8cfb-33b2e77c83c9"
+          ],
+          "description": "This is a combat room at level 19."
+        }
+      ]
+    },
+    {
+      "level": 20,
+      "rooms": [
+        {
+          "id": "314831fd-e074-47c9-8cfb-33b2e77c83c9",
+          "type": "boss",
+          "level": 20,
+          "state": "locked",
+          "connections": [
+            "cb92d884-d92c-48bf-a36c-f24461156493"
+          ],
+          "description": "This is a boss room at level 20."
+        }
+      ]
+    }
+  ]
+};</script>
+</head>
+<body>
+    <header>
+        <h1>Dungeon Map</h1>
+        <p class="stats" id="stats">Loading...</p>
+    </header>
+    
+    <div class="controls">
+        <label>
+            Seed:
+            <input type="text" id="seed-input" value="my_epic_seed" />
+        </label>
+        <button id="generate-btn">Generate</button>
+        
+        <div class="legend">
+            <div class="legend-item"><div class="legend-color" style="background:#4a9c3f"></div>Entrance</div>
+            <div class="legend-item"><div class="legend-color" style="background:#c73e4d"></div>Combat</div>
+            <div class="legend-item"><div class="legend-color" style="background:#a32d8c"></div>Elite</div>
+            <div class="legend-item"><div class="legend-color" style="background:#ffd700"></div>Boss</div>
+            <div class="legend-item"><div class="legend-color" style="background:#b8860b"></div>Treasure</div>
+            <div class="legend-item"><div class="legend-color" style="background:#3498db"></div>Rest</div>
+            <div class="legend-item"><div class="legend-color" style="background:#c9a959"></div>Shop</div>
+            <div class="legend-item"><div class="legend-color" style="background:#7c6fb0"></div>Event</div>
+            <div class="legend-item"><div class="legend-color" style="background:#2dd4bf"></div>Puzzle</div>
+        </div>
+    </div>
+    
+    <div id="map-container">
+        <div id="dungeon-map"></div>
+    </div>
+    
+    <div class="tooltip" id="tooltip">
+        <h3 id="tooltip-title">Room</h3>
+        <p id="tooltip-desc">Description</p>
+        <div class="connections-list" id="tooltip-connections"></div>
+    </div>
+
+    <script type="module">
+        // This will be populated by the dungeon data
+        let dungeonData = null;
+        
+        const typeAbbrev = {
+            'entrance': 'ENT',
+            'combat': 'CMB',
+            'elite': 'ELT',
+            'boss': 'BOS',
+            'treasure': 'TRS',
+            'rest': 'RST',
+            'shop': 'SHP',
+            'event': 'EVT',
+            'puzzle': 'PZL',
+        };
+        
+        const typeNames = {
+            'entrance': 'Entrance',
+            'combat': 'Combat',
+            'elite': 'Elite Combat',
+            'boss': 'Boss Chamber',
+            'treasure': 'Treasure Room',
+            'rest': 'Rest Site',
+            'shop': 'Shop',
+            'event': 'Mystery Event',
+            'puzzle': 'Puzzle Room',
+        };
+        
+        function renderDungeon(data) {
+            dungeonData = data;
+            const { layers, rooms } = data;
+            const roomMap = new Map(rooms.map(r => [r.id, r]));
+            
+            // Update stats
+            document.getElementById('stats').textContent = 
+                `${rooms.length} rooms across ${layers.length} levels`;
+            
+            const mapContainer = document.getElementById('dungeon-map');
+            mapContainer.innerHTML = '';
+            
+            // Create layers
+            const roomElements = new Map();
+            
+            for (const layer of layers) {
+                const layerDiv = document.createElement('div');
+                layerDiv.className = 'layer';
+                layerDiv.dataset.level = layer.level;
+                
+                const labelDiv = document.createElement('div');
+                labelDiv.className = 'layer-label';
+                labelDiv.textContent = `L${layer.level}`;
+                layerDiv.appendChild(labelDiv);
+                
+                const roomsDiv = document.createElement('div');
+                roomsDiv.className = 'rooms';
+                
+                for (const room of layer.rooms) {
+                    const roomDiv = document.createElement('div');
+                    roomDiv.className = `room room-${room.type}`;
+                    roomDiv.dataset.id = room.id;
+                    roomDiv.innerHTML = `
+                        <span class="room-type">${typeAbbrev[room.type] || room.type}</span>
+                        <span class="room-id">${room.id.slice(0, 6)}</span>
+                    `;
+                    
+                    roomDiv.addEventListener('mouseenter', (e) => showTooltip(e, room, roomMap));
+                    roomDiv.addEventListener('mouseleave', hideTooltip);
+                    roomDiv.addEventListener('mouseenter', () => highlightConnections(room.id, roomMap));
+                    roomDiv.addEventListener('mouseleave', clearHighlights);
+                    
+                    roomsDiv.appendChild(roomDiv);
+                    roomElements.set(room.id, roomDiv);
+                }
+                
+                layerDiv.appendChild(roomsDiv);
+                mapContainer.appendChild(layerDiv);
+            }
+            
+            // Draw connections after layout
+            requestAnimationFrame(() => {
+                drawConnections(rooms, roomElements, roomMap);
+            });
+        }
+        
+        function drawConnections(rooms, roomElements, roomMap) {
+            const mapContainer = document.getElementById('dungeon-map');
+            const containerRect = mapContainer.getBoundingClientRect();
+            
+            // Remove old SVG
+            const oldSvg = document.getElementById('connections-svg');
+            if (oldSvg) oldSvg.remove();
+            
+            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            svg.id = 'connections-svg';
+            svg.style.width = mapContainer.scrollWidth + 'px';
+            svg.style.height = mapContainer.scrollHeight + 'px';
+            
+            for (const room of rooms) {
+                const fromEl = roomElements.get(room.id);
+                if (!fromEl) continue;
+                
+                for (const connId of room.connections) {
+                    const connRoom = roomMap.get(connId);
+                    if (!connRoom || connRoom.level <= room.level) continue; // Only draw forward
+                    
+                    const toEl = roomElements.get(connId);
+                    if (!toEl) continue;
+                    
+                    const fromRect = fromEl.getBoundingClientRect();
+                    const toRect = toEl.getBoundingClientRect();
+                    
+                    const x1 = fromRect.left + fromRect.width / 2 - containerRect.left + mapContainer.scrollLeft;
+                    const y1 = fromRect.bottom - containerRect.top + mapContainer.scrollTop;
+                    const x2 = toRect.left + toRect.width / 2 - containerRect.left + mapContainer.scrollLeft;
+                    const y2 = toRect.top - containerRect.top + mapContainer.scrollTop;
+                    
+                    const line = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                    const midY = (y1 + y2) / 2;
+                    line.setAttribute('d', `M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`);
+                    line.setAttribute('class', 'connection-line');
+                    line.dataset.from = room.id;
+                    line.dataset.to = connId;
+                    svg.appendChild(line);
+                }
+            }
+            
+            mapContainer.insertBefore(svg, mapContainer.firstChild);
+        }
+        
+        function showTooltip(e, room, roomMap) {
+            const tooltip = document.getElementById('tooltip');
+            const title = document.getElementById('tooltip-title');
+            const desc = document.getElementById('tooltip-desc');
+            const conns = document.getElementById('tooltip-connections');
+            
+            title.textContent = typeNames[room.type] || room.type;
+            desc.textContent = room.description || `Level ${room.level} ${room.type} room`;
+            
+            const connNames = room.connections
+                .map(id => roomMap.get(id))
+                .filter(r => r)
+                .map(r => `${typeAbbrev[r.type]}:${r.id.slice(0,4)} (L${r.level})`)
+                .join(', ');
+            conns.textContent = connNames ? `Connects to: ${connNames}` : 'No connections';
+            
+            tooltip.style.left = e.clientX + 15 + 'px';
+            tooltip.style.top = e.clientY + 15 + 'px';
+            tooltip.classList.add('visible');
+        }
+        
+        function hideTooltip() {
+            document.getElementById('tooltip').classList.remove('visible');
+        }
+        
+        function highlightConnections(roomId, roomMap) {
+            const lines = document.querySelectorAll('.connection-line');
+            lines.forEach(line => {
+                if (line.dataset.from === roomId || line.dataset.to === roomId) {
+                    line.classList.add('highlighted');
+                }
+            });
+        }
+        
+        function clearHighlights() {
+            document.querySelectorAll('.connection-line.highlighted').forEach(l => {
+                l.classList.remove('highlighted');
+            });
+        }
+        
+        // Load dungeon data from embedded script or fetch
+        async function loadDungeon() {
+            // Check if data is embedded
+            if (window.DUNGEON_DATA) {
+                renderDungeon(window.DUNGEON_DATA);
+                return;
+            }
+            
+            // Otherwise try to fetch from API
+            try {
+                const seed = document.getElementById('seed-input').value || 'default';
+                const response = await fetch(`/api/dungeon?seed=${encodeURIComponent(seed)}`);
+                const data = await response.json();
+                renderDungeon(data);
+            } catch (err) {
+                console.error('Failed to load dungeon:', err);
+                document.getElementById('stats').textContent = 'Failed to load dungeon data';
+            }
+        }
+        
+        document.getElementById('generate-btn').addEventListener('click', loadDungeon);
+        document.getElementById('seed-input').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') loadDungeon();
+        });
+        
+        // Initial load
+        loadDungeon();
+    </script>
+</body>
+</html>
+

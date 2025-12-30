@@ -1,0 +1,26 @@
+{
+  "name": "dungeon-roguelike",
+  "version": "1.0.0",
+  "description": "A turn-based dungeon roguelike game",
+  "main": "index.js",
+  "scripts": {
+    "test": "vitest",
+    "start": "npx tsx src/main.ts",
+    "build": "tsc",
+    "map": "npx tsx src/generate-html.ts",
+    "dev": "esbuild src/ui/webEntry.ts --bundle --outfile=public/game.js --sourcemap --watch --format=esm",
+    "build:web": "esbuild src/ui/webEntry.ts --bundle --outfile=public/game.js --minify --format=esm",
+    "serve": "npx serve public"
+  },
+  "keywords": ["roguelike", "dungeon", "game", "typescript"],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "devDependencies": {
+    "@types/node": "^25.0.3",
+    "esbuild": "^0.24.0",
+    "serve": "^14.2.4",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}

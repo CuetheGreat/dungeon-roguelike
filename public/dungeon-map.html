@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dungeon Map</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap');
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'JetBrains Mono', monospace;
+            background: #0a0a0f;
+            background-image: 
+                radial-gradient(ellipse at top, #1a1a2e 0%, transparent 50%),
+                radial-gradient(ellipse at bottom, #16213e 0%, transparent 50%),
+                repeating-linear-gradient(
+                    0deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(255,255,255,0.01) 2px,
+                    rgba(255,255,255,0.01) 4px
+                );
+            min-height: 100vh;
+            color: #e8e8e8;
+            overflow-x: auto;
+        }
+        
+        header {
+            padding: 2rem;
+            text-align: center;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            background: linear-gradient(180deg, rgba(26,26,46,0.8) 0%, transparent 100%);
+        }
+        
+        h1 {
+            font-family: 'Cinzel', serif;
+            font-size: 2.5rem;
+            font-weight: 700;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            background: linear-gradient(135deg, #ffd700 0%, #ff6b35 50%, #ffd700 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-shadow: 0 0 40px rgba(255,215,0,0.3);
+        }
+        
+        .stats {
+            margin-top: 0.5rem;
+            font-size: 0.85rem;
+            color: #888;
+        }
+        
+        .controls {
+            padding: 1rem 2rem;
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+            flex-wrap: wrap;
+            background: rgba(0,0,0,0.3);
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        
+        .controls label {
+            font-size: 0.8rem;
+            color: #aaa;
+        }
+        
+        .controls input {
+            font-family: inherit;
+            padding: 0.5rem 1rem;
+            background: #1a1a2e;
+            border: 1px solid #333;
+            color: #fff;
+            border-radius: 4px;
+            width: 200px;
+        }
+        
+        .controls button {
+            font-family: inherit;
+            padding: 0.5rem 1.5rem;
+            background: linear-gradient(135deg, #ff6b35, #f7931e);
+            border: none;
+            color: #000;
+            font-weight: 500;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: transform 0.1s, box-shadow 0.2s;
+        }
+        
+        .controls button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 20px rgba(255,107,53,0.4);
+        }
+        
+        .legend {
+            display: flex;
+            gap: 1rem;
+            margin-left: auto;
+            flex-wrap: wrap;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-size: 0.75rem;
+        }
+        
+        .legend-color {
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+        }
+        
+        #map-container {
+            padding: 2rem;
+            overflow-x: auto;
+        }
+        
+        #dungeon-map {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+            min-width: fit-content;
+        }
+        
+        .layer {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin: 0.5rem 0;
+            position: relative;
+        }
+        
+        .layer-label {
+            font-size: 0.7rem;
+            color: #555;
+            width: 50px;
+            text-align: right;
+            flex-shrink: 0;
+        }
+        
+        .rooms {
+            display: flex;
+            gap: 2rem;
+            justify-content: center;
+            min-width: 400px;
+        }
+        
+        .room {
+            width: 70px;
+            height: 70px;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            position: relative;
+            border: 2px solid rgba(255,255,255,0.1);
+        }
+        
+        .room:hover {
+            transform: scale(1.15);
+            z-index: 100;
+        }
+        
+        .room-type {
+            font-size: 0.7rem;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+        }
+        
+        .room-id {
+            font-size: 0.55rem;
+            opacity: 0.6;
+            margin-top: 2px;
+        }
+        
+        .room-level {
+            position: absolute;
+            bottom: -18px;
+            font-size: 0.55rem;
+            color: #666;
+        }
+        
+        /* Room type colors */
+        .room-entrance {
+            background: linear-gradient(135deg, #2d5a27, #1e3d1a);
+            border-color: #4a9c3f;
+            box-shadow: 0 0 20px rgba(74,156,63,0.3);
+        }
+        
+        .room-combat {
+            background: linear-gradient(135deg, #8b2635, #5c1a23);
+            border-color: #c73e4d;
+            box-shadow: 0 0 15px rgba(199,62,77,0.2);
+        }
+        
+        .room-elite {
+            background: linear-gradient(135deg, #6b1a5c, #3d0f35);
+            border-color: #a32d8c;
+            box-shadow: 0 0 20px rgba(163,45,140,0.3);
+        }
+        
+        .room-boss {
+            background: linear-gradient(135deg, #1a1a1a, #000);
+            border-color: #ffd700;
+            box-shadow: 0 0 30px rgba(255,215,0,0.4), inset 0 0 20px rgba(255,0,0,0.2);
+        }
+        
+        .room-treasure {
+            background: linear-gradient(135deg, #b8860b, #8b6508);
+            border-color: #ffd700;
+            box-shadow: 0 0 20px rgba(255,215,0,0.4);
+        }
+        
+        .room-rest {
+            background: linear-gradient(135deg, #1e4d6b, #0f2d40);
+            border-color: #3498db;
+            box-shadow: 0 0 15px rgba(52,152,219,0.3);
+        }
+        
+        .room-shop {
+            background: linear-gradient(135deg, #5d4e37, #3d3225);
+            border-color: #c9a959;
+            box-shadow: 0 0 15px rgba(201,169,89,0.2);
+        }
+        
+        .room-event {
+            background: linear-gradient(135deg, #4a3f6b, #2d2640);
+            border-color: #7c6fb0;
+            box-shadow: 0 0 15px rgba(124,111,176,0.3);
+        }
+        
+        .room-puzzle {
+            background: linear-gradient(135deg, #1a5c5c, #0f3535);
+            border-color: #2dd4bf;
+            box-shadow: 0 0 15px rgba(45,212,191,0.3);
+        }
+        
+        /* SVG connections */
+        #connections-svg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+            z-index: -1;
+        }
+        
+        .connection-line {
+            stroke: rgba(255,255,255,0.15);
+            stroke-width: 2;
+            fill: none;
+        }
+        
+        .connection-line.highlighted {
+            stroke: rgba(255,215,0,0.6);
+            stroke-width: 3;
+        }
+        
+        /* Tooltip */
+        .tooltip {
+            position: fixed;
+            background: #1a1a2e;
+            border: 1px solid #333;
+            padding: 1rem;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s;
+            z-index: 1000;
+            max-width: 250px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+        }
+        
+        .tooltip.visible {
+            opacity: 1;
+        }
+        
+        .tooltip h3 {
+            font-family: 'Cinzel', serif;
+            margin-bottom: 0.5rem;
+            color: #ffd700;
+        }
+        
+        .tooltip p {
+            color: #aaa;
+            line-height: 1.4;
+        }
+        
+        .tooltip .connections-list {
+            margin-top: 0.5rem;
+            padding-top: 0.5rem;
+            border-top: 1px solid #333;
+            font-size: 0.7rem;
+            color: #888;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Dungeon Map</h1>
+        <p class="stats" id="stats">Loading...</p>
+    </header>
+    
+    <div class="controls">
+        <label>
+            Seed:
+            <input type="text" id="seed-input" value="my_epic_seed" />
+        </label>
+        <button id="generate-btn">Generate</button>
+        
+        <div class="legend">
+            <div class="legend-item"><div class="legend-color" style="background:#4a9c3f"></div>Entrance</div>
+            <div class="legend-item"><div class="legend-color" style="background:#c73e4d"></div>Combat</div>
+            <div class="legend-item"><div class="legend-color" style="background:#a32d8c"></div>Elite</div>
+            <div class="legend-item"><div class="legend-color" style="background:#ffd700"></div>Boss</div>
+            <div class="legend-item"><div class="legend-color" style="background:#b8860b"></div>Treasure</div>
+            <div class="legend-item"><div class="legend-color" style="background:#3498db"></div>Rest</div>
+            <div class="legend-item"><div class="legend-color" style="background:#c9a959"></div>Shop</div>
+            <div class="legend-item"><div class="legend-color" style="background:#7c6fb0"></div>Event</div>
+            <div class="legend-item"><div class="legend-color" style="background:#2dd4bf"></div>Puzzle</div>
+        </div>
+    </div>
+    
+    <div id="map-container">
+        <div id="dungeon-map"></div>
+    </div>
+    
+    <div class="tooltip" id="tooltip">
+        <h3 id="tooltip-title">Room</h3>
+        <p id="tooltip-desc">Description</p>
+        <div class="connections-list" id="tooltip-connections"></div>
+    </div>
+
+    <script type="module">
+        // This will be populated by the dungeon data
+        let dungeonData = null;
+        
+        const typeAbbrev = {
+            'entrance': 'ENT',
+            'combat': 'CMB',
+            'elite': 'ELT',
+            'boss': 'BOS',
+            'treasure': 'TRS',
+            'rest': 'RST',
+            'shop': 'SHP',
+            'event': 'EVT',
+            'puzzle': 'PZL',
+        };
+        
+        const typeNames = {
+            'entrance': 'Entrance',
+            'combat': 'Combat',
+            'elite': 'Elite Combat',
+            'boss': 'Boss Chamber',
+            'treasure': 'Treasure Room',
+            'rest': 'Rest Site',
+            'shop': 'Shop',
+            'event': 'Mystery Event',
+            'puzzle': 'Puzzle Room',
+        };
+        
+        function renderDungeon(data) {
+            dungeonData = data;
+            const { layers, rooms } = data;
+            const roomMap = new Map(rooms.map(r => [r.id, r]));
+            
+            // Update stats
+            document.getElementById('stats').textContent = 
+                `${rooms.length} rooms across ${layers.length} levels`;
+            
+            const mapContainer = document.getElementById('dungeon-map');
+            mapContainer.innerHTML = '';
+            
+            // Create layers
+            const roomElements = new Map();
+            
+            for (const layer of layers) {
+                const layerDiv = document.createElement('div');
+                layerDiv.className = 'layer';
+                layerDiv.dataset.level = layer.level;
+                
+                const labelDiv = document.createElement('div');
+                labelDiv.className = 'layer-label';
+                labelDiv.textContent = `L${layer.level}`;
+                layerDiv.appendChild(labelDiv);
+                
+                const roomsDiv = document.createElement('div');
+                roomsDiv.className = 'rooms';
+                
+                for (const room of layer.rooms) {
+                    const roomDiv = document.createElement('div');
+                    roomDiv.className = `room room-${room.type}`;
+                    roomDiv.dataset.id = room.id;
+                    roomDiv.innerHTML = `
+                        <span class="room-type">${typeAbbrev[room.type] || room.type}</span>
+                        <span class="room-id">${room.id.slice(0, 6)}</span>
+                    `;
+                    
+                    roomDiv.addEventListener('mouseenter', (e) => showTooltip(e, room, roomMap));
+                    roomDiv.addEventListener('mouseleave', hideTooltip);
+                    roomDiv.addEventListener('mouseenter', () => highlightConnections(room.id, roomMap));
+                    roomDiv.addEventListener('mouseleave', clearHighlights);
+                    
+                    roomsDiv.appendChild(roomDiv);
+                    roomElements.set(room.id, roomDiv);
+                }
+                
+                layerDiv.appendChild(roomsDiv);
+                mapContainer.appendChild(layerDiv);
+            }
+            
+            // Draw connections after layout
+            requestAnimationFrame(() => {
+                drawConnections(rooms, roomElements, roomMap);
+            });
+        }
+        
+        function drawConnections(rooms, roomElements, roomMap) {
+            const mapContainer = document.getElementById('dungeon-map');
+            const containerRect = mapContainer.getBoundingClientRect();
+            
+            // Remove old SVG
+            const oldSvg = document.getElementById('connections-svg');
+            if (oldSvg) oldSvg.remove();
+            
+            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            svg.id = 'connections-svg';
+            svg.style.width = mapContainer.scrollWidth + 'px';
+            svg.style.height = mapContainer.scrollHeight + 'px';
+            
+            for (const room of rooms) {
+                const fromEl = roomElements.get(room.id);
+                if (!fromEl) continue;
+                
+                for (const connId of room.connections) {
+                    const connRoom = roomMap.get(connId);
+                    if (!connRoom || connRoom.level <= room.level) continue; // Only draw forward
+                    
+                    const toEl = roomElements.get(connId);
+                    if (!toEl) continue;
+                    
+                    const fromRect = fromEl.getBoundingClientRect();
+                    const toRect = toEl.getBoundingClientRect();
+                    
+                    const x1 = fromRect.left + fromRect.width / 2 - containerRect.left + mapContainer.scrollLeft;
+                    const y1 = fromRect.bottom - containerRect.top + mapContainer.scrollTop;
+                    const x2 = toRect.left + toRect.width / 2 - containerRect.left + mapContainer.scrollLeft;
+                    const y2 = toRect.top - containerRect.top + mapContainer.scrollTop;
+                    
+                    const line = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                    const midY = (y1 + y2) / 2;
+                    line.setAttribute('d', `M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`);
+                    line.setAttribute('class', 'connection-line');
+                    line.dataset.from = room.id;
+                    line.dataset.to = connId;
+                    svg.appendChild(line);
+                }
+            }
+            
+            mapContainer.insertBefore(svg, mapContainer.firstChild);
+        }
+        
+        function showTooltip(e, room, roomMap) {
+            const tooltip = document.getElementById('tooltip');
+            const title = document.getElementById('tooltip-title');
+            const desc = document.getElementById('tooltip-desc');
+            const conns = document.getElementById('tooltip-connections');
+            
+            title.textContent = typeNames[room.type] || room.type;
+            desc.textContent = room.description || `Level ${room.level} ${room.type} room`;
+            
+            const connNames = room.connections
+                .map(id => roomMap.get(id))
+                .filter(r => r)
+                .map(r => `${typeAbbrev[r.type]}:${r.id.slice(0,4)} (L${r.level})`)
+                .join(', ');
+            conns.textContent = connNames ? `Connects to: ${connNames}` : 'No connections';
+            
+            tooltip.style.left = e.clientX + 15 + 'px';
+            tooltip.style.top = e.clientY + 15 + 'px';
+            tooltip.classList.add('visible');
+        }
+        
+        function hideTooltip() {
+            document.getElementById('tooltip').classList.remove('visible');
+        }
+        
+        function highlightConnections(roomId, roomMap) {
+            const lines = document.querySelectorAll('.connection-line');
+            lines.forEach(line => {
+                if (line.dataset.from === roomId || line.dataset.to === roomId) {
+                    line.classList.add('highlighted');
+                }
+            });
+        }
+        
+        function clearHighlights() {
+            document.querySelectorAll('.connection-line.highlighted').forEach(l => {
+                l.classList.remove('highlighted');
+            });
+        }
+        
+        // Load dungeon data from embedded script or fetch
+        async function loadDungeon() {
+            // Check if data is embedded
+            if (window.DUNGEON_DATA) {
+                renderDungeon(window.DUNGEON_DATA);
+                return;
+            }
+            
+            // Otherwise try to fetch from API
+            try {
+                const seed = document.getElementById('seed-input').value || 'default';
+                const response = await fetch(`/api/dungeon?seed=${encodeURIComponent(seed)}`);
+                const data = await response.json();
+                renderDungeon(data);
+            } catch (err) {
+                console.error('Failed to load dungeon:', err);
+                document.getElementById('stats').textContent = 'Failed to load dungeon data';
+            }
+        }
+        
+        document.getElementById('generate-btn').addEventListener('click', loadDungeon);
+        document.getElementById('seed-input').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') loadDungeon();
+        });
+        
+        // Initial load
+        loadDungeon();
+    </script>
+</body>
+</html>
+

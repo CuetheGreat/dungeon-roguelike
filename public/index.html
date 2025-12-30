@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dungeon Roguelike</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="game-container">
+        <!-- Character Selection Screen -->
+        <div id="character-select" class="screen">
+            <div class="title-section">
+                <h1 class="game-title">Dungeon Roguelike</h1>
+                <p class="game-subtitle">A turn-based adventure awaits</p>
+            </div>
+            
+            <div class="select-section">
+                <h2>Choose Your Class</h2>
+                
+                <div class="class-options">
+                    <div class="class-card" data-class="fighter" role="button" tabindex="0" aria-label="Select Fighter class">
+                        <div class="class-icon">&#9876;</div>
+                        <h3>Fighter</h3>
+                        <div class="class-stats">
+                            <div class="stat"><span class="label">HP:</span> <span class="value">120</span></div>
+                            <div class="stat"><span class="label">MP:</span> <span class="value">30</span></div>
+                            <div class="stat"><span class="label">ATK:</span> <span class="value">12</span></div>
+                            <div class="stat"><span class="label">DEF:</span> <span class="value">10</span></div>
+                        </div>
+                        <p class="class-desc">A stalwart warrior with high health and defense. Excels in sustained combat.</p>
+                    </div>
+                    
+                    <div class="class-card" data-class="warlock" role="button" tabindex="0" aria-label="Select Warlock class">
+                        <div class="class-icon">&#10026;</div>
+                        <h3>Warlock</h3>
+                        <div class="class-stats">
+                            <div class="stat"><span class="label">HP:</span> <span class="value">80</span></div>
+                            <div class="stat"><span class="label">MP:</span> <span class="value">100</span></div>
+                            <div class="stat"><span class="label">ATK:</span> <span class="value">6</span></div>
+                            <div class="stat"><span class="label">DEF:</span> <span class="value">6</span></div>
+                        </div>
+                        <p class="class-desc">A master of dark magic with devastating spells. High risk, high reward.</p>
+                    </div>
+                </div>
+                
+                <div class="name-input">
+                    <label for="player-name">Enter Your Name</label>
+                    <input type="text" id="player-name" placeholder="Hero" maxlength="20">
+                </div>
+                
+                <div class="seed-input">
+                    <label for="game-seed">Dungeon Seed (optional)</label>
+                    <input type="text" id="game-seed" placeholder="Random">
+                </div>
+                
+                <button id="start-game" class="start-btn" disabled>Begin Adventure</button>
+            </div>
+        </div>
+        
+        <!-- Loading Screen -->
+        <div id="loading-screen" class="screen hidden">
+            <div class="loading-content">
+                <div class="loading-spinner"></div>
+                <p class="loading-text">Generating dungeon...</p>
+            </div>
+        </div>
+        
+        <!-- Game Screen (populated by WebGameLoop) -->
+        <div id="game-screen" class="screen hidden"></div>
+    </div>
+    
+    <script type="module" src="game.js"></script>
+</body>
+</html>
+
