@@ -1366,10 +1366,17 @@ export class CombatEngine {
     /**
      * Advance to the next turn.
      * Handles round advancement when all combatants have acted.
+     * Ticks player cooldowns and buffs at end of player's turn.
      */
     nextTurn(): TurnOrderEntry | null {
         if (this.state.status !== CombatStatus.IN_PROGRESS) {
             return null;
+        }
+
+        // Tick player cooldowns at end of their turn
+        const currentTurn = this.getCurrentTurn();
+        if (currentTurn?.combatant.isPlayer) {
+            this.player.endTurn();
         }
 
         this.state.currentTurnIndex++;

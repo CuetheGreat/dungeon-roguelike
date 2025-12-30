@@ -195,6 +195,7 @@ export const WEAPONS: Item[] = [
             description: 'Release a burst of arcane energy dealing damage to all enemies.',
             manaCost: 25,
             cooldown: 4,
+            currentCooldown: 0,
             damage: 20,
             damageType: DamageType.MAGIC,
             isAoe: true
@@ -229,6 +230,7 @@ export const WEAPONS: Item[] = [
             description: 'Absorb incoming magic damage and convert it to mana.',
             manaCost: 0,
             cooldown: 5,
+            currentCooldown: 0,
             effect: 'magic_immunity'
         }
     }),
@@ -255,6 +257,7 @@ export const WEAPONS: Item[] = [
             description: 'Drain the soul of an enemy, dealing massive damage and healing yourself.',
             manaCost: 40,
             cooldown: 6,
+            currentCooldown: 0,
             damage: 50,
             damageType: DamageType.NECROTIC,
             healing: 25
@@ -426,6 +429,7 @@ export const ARMOR: Item[] = [
             description: 'Become immune to all damage for 1 turn.',
             manaCost: 50,
             cooldown: 10,
+            currentCooldown: 0,
             effect: 'invulnerable'
         }
     })
@@ -528,6 +532,7 @@ export const ACCESSORIES: Item[] = [
             description: 'Hurl a ball of fire at all enemies.',
             manaCost: 30,
             cooldown: 5,
+            currentCooldown: 0,
             damage: 30,
             damageType: DamageType.FIRE,
             isAoe: true
@@ -575,6 +580,7 @@ export const ACCESSORIES: Item[] = [
             description: 'Fully restore health and mana, and reset all cooldowns.',
             manaCost: 0,
             cooldown: 99, // Essentially once per dungeon
+            currentCooldown: 0,
             healing: 999,
             effect: 'full_restore'
         }

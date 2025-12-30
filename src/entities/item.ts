@@ -151,6 +151,8 @@ export interface GrantedAbility {
     manaCost: number;
     /** Cooldown in turns */
     cooldown: number;
+    /** Current cooldown remaining (0 = ready to use) */
+    currentCooldown: number;
     /** Damage dealt (if applicable) */
     damage?: number;
     /** Damage type (if applicable) */

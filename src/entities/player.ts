@@ -1092,11 +1092,26 @@ export abstract class Player {
     /**
      * Reduces all ability cooldowns by 1.
      * Called at end of turn.
+     * Ticks both class abilities and item-granted abilities.
      */
     tickCooldowns(): void {
+        // Tick class abilities
         for (const ability of this.abilities) {
             if (ability.currentCooldown > 0) {
                 ability.currentCooldown--;
+            }
+        }
+        
+        // Tick item-granted abilities from equipment
+        const equippedItems: (Item | null)[] = [
+            this.equipment.weapon,
+            this.equipment.armor,
+            this.equipment.accessory
+        ];
+        
+        for (const item of equippedItems) {
+            if (item?.grantedAbility && item.grantedAbility.currentCooldown > 0) {
+                item.grantedAbility.currentCooldown--;
             }
         }
     }
