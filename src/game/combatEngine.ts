@@ -1045,6 +1045,178 @@ export class CombatEngine {
             };
         }
 
+        // Handle lifesteal abilities (Drain Life) - damage + heal for % of damage
+        if (ability.effect === 'lifesteal' && ability.damage && targetId) {
+            const target = this.enemies.find(e => e.id === targetId);
+            if (!target) {
+                return {
+                    abilityName: ability.name,
+                    success: false,
+                    enemiesKilled: [],
+                    message: 'Target not found'
+                };
+            }
+
+            // Calculate damage (use ability.damage as base, scale with level)
+            const baseDamage = ability.damage + Math.floor(this.player.level * 0.8);
+            const damageModifier = this.getDamageReceivedModifier(target.id);
+            totalDamage = Math.max(1, Math.floor(baseDamage * damageModifier));
+            
+            // Apply damage
+            target.health = Math.max(0, target.health - totalDamage);
+            this.updateCombatantHealth(target.id, target.health);
+            
+            // Heal for 40% of damage dealt
+            totalHealing = this.player.heal(Math.floor(totalDamage * 0.4));
+            
+            this.state.log.push(`${ability.name} drains ${target.name} for ${totalDamage} damage!`);
+            this.state.log.push(`${this.player.name} heals for ${totalHealing} HP!`);
+
+            if (target.health <= 0) {
+                enemiesKilled.push(target.id);
+                this.state.log.push(`${target.name} is defeated!`);
+                this.removeDeadEnemy(target.id);
+            }
+
+            message = `${this.player.name} uses ${ability.name}, dealing ${totalDamage} damage and healing for ${totalHealing}!`;
+            this.checkCombatEnd();
+
+            return {
+                abilityName: ability.name,
+                success: true,
+                damage: totalDamage,
+                healing: totalHealing,
+                effectApplied: 'lifesteal',
+                enemiesKilled,
+                message
+            };
+        }
+
+        // Handle debuff abilities (Hex) - apply vulnerability to enemy
+        if (ability.effect === 'debuff' && targetId) {
+            const target = this.enemies.find(e => e.id === targetId);
+            if (!target) {
+                return {
+                    abilityName: ability.name,
+                    success: false,
+                    enemiesKilled: [],
+                    message: 'Target not found'
+                };
+            }
+
+            // Apply vulnerability status effect (20% more damage taken for 3 turns)
+            this.applyStatusEffect(
+                target.id,
+                StatusEffectType.VULNERABLE,
+                3, // duration
+                ability.name,
+                this.player.level,
+                20 // 20% more damage taken
+            );
+            
+            message = `${this.player.name} uses ${ability.name} on ${target.name}! They take 20% more damage for 3 turns!`;
+            this.state.log.push(message);
+
+            return {
+                abilityName: ability.name,
+                success: true,
+                effectApplied: 'debuff',
+                enemiesKilled: [],
+                message
+            };
+        }
+
+        // Handle mana restore abilities (Dark Pact) - sacrifice HP for mana
+        if (ability.effect === 'mana_restore') {
+            const healthCost = Math.floor(this.player.stats.health * 0.15);
+            const manaRestore = Math.floor(this.player.getMaxMana() * 0.3);
+
+            // Can't kill yourself with this ability
+            if (this.player.stats.health <= healthCost) {
+                return {
+                    abilityName: ability.name,
+                    success: false,
+                    enemiesKilled: [],
+                    message: `Not enough health to use ${ability.name}!`
+                };
+            }
+
+            this.player.stats.health -= healthCost;
+            const actualManaRestored = this.player.restoreMana(manaRestore);
+            this.updateCombatantHealth(this.player.id, this.player.stats.health);
+
+            message = `${this.player.name} uses ${ability.name}, sacrificing ${healthCost} HP to restore ${actualManaRestored} mana!`;
+            this.state.log.push(message);
+
+            return {
+                abilityName: ability.name,
+                success: true,
+                damage: healthCost, // Self-damage
+                effectApplied: 'mana_restore',
+                enemiesKilled: [],
+                message
+            };
+        }
+
+        // Handle consume_shards abilities (Soul Harvest) - consume soul shards for damage
+        if (ability.effect === 'consume_shards') {
+            // Check if player is a Warlock with soul shards
+            const warlock = this.player as { soulShards?: number };
+            if (warlock.soulShards === undefined || warlock.soulShards === 0) {
+                return {
+                    abilityName: ability.name,
+                    success: false,
+                    enemiesKilled: [],
+                    message: `No soul shards to consume!`
+                };
+            }
+
+            const shardsConsumed = warlock.soulShards;
+            const damagePerShard = (ability.damage ?? 10) + Math.floor(this.player.level * 1.5);
+            const totalShardDamage = damagePerShard * shardsConsumed;
+            warlock.soulShards = 0;
+
+            // Deal damage to target or first enemy
+            const target = targetId 
+                ? this.enemies.find(e => e.id === targetId) 
+                : this.enemies[0];
+            
+            if (!target) {
+                return {
+                    abilityName: ability.name,
+                    success: false,
+                    enemiesKilled: [],
+                    message: 'No target available'
+                };
+            }
+
+            const damageModifier = this.getDamageReceivedModifier(target.id);
+            totalDamage = Math.max(1, Math.floor(totalShardDamage * damageModifier));
+            target.health = Math.max(0, target.health - totalDamage);
+            this.updateCombatantHealth(target.id, target.health);
+
+            this.state.log.push(`${ability.name} consumes ${shardsConsumed} soul shards!`);
+            this.state.log.push(`${ability.name} hits ${target.name} for ${totalDamage} damage!`);
+
+            if (target.health <= 0) {
+                enemiesKilled.push(target.id);
+                this.state.log.push(`${target.name} is defeated!`);
+                this.removeDeadEnemy(target.id);
+            }
+
+            message = `${this.player.name} uses ${ability.name}, consuming ${shardsConsumed} shards for ${totalDamage} damage!`;
+            this.checkCombatEnd();
+
+            return {
+                abilityName: ability.name,
+                success: true,
+                damage: totalDamage,
+                effectApplied: 'consume_shards',
+                enemiesKilled,
+                message
+            };
+        }
+
         // Handle full restore abilities (like Wish)
         if (ability.effect === 'full_restore') {
             this.player.stats.health = this.player.getMaxHealth();
@@ -1174,8 +1346,27 @@ export class CombatEngine {
                 };
             }
 
-            const baseDamage = this.player.basicAttack().damage;
-            const abilityDamage = Math.floor(baseDamage * ability.damage);
+            // Determine if damage is a multiplier (< 5) or flat value (>= 5)
+            // Fighter abilities use multipliers (0.75, 1.5), Warlock uses flat (8, 12, 25)
+            let abilityDamage: number;
+            if (ability.damage < 5) {
+                // Multiplier-based (Fighter style)
+                const baseDamage = this.player.basicAttack().damage;
+                abilityDamage = Math.floor(baseDamage * ability.damage);
+            } else {
+                // Flat damage with level scaling (Warlock style)
+                abilityDamage = ability.damage + Math.floor(this.player.level * 1.2);
+                
+                // Check for soul shard bonus (Shadow Bolt)
+                const warlock = this.player as { soulShards?: number };
+                if (warlock.soulShards !== undefined && warlock.soulShards > 0 && ability.id === 'shadow_bolt') {
+                    const shardBonus = warlock.soulShards * 4;
+                    abilityDamage += shardBonus;
+                    this.state.log.push(`Soul shards add ${shardBonus} bonus damage!`);
+                    warlock.soulShards = 0;
+                }
+            }
+            
             const damageModifier = this.getDamageReceivedModifier(target.id);
             totalDamage = Math.max(1, Math.floor(abilityDamage * damageModifier));
 
@@ -1401,8 +1592,18 @@ export class CombatEngine {
 
     /**
      * Remove a dead enemy from combat.
+     * Also grants soul shards to Warlock players.
      */
     private removeDeadEnemy(enemyId: string): void {
+        // Grant soul shard to Warlock on enemy kill
+        const warlock = this.player as { soulShards?: number; maxSoulShards?: number; gainSoulShard?: () => boolean };
+        if (warlock.gainSoulShard) {
+            const gained = warlock.gainSoulShard();
+            if (gained) {
+                this.state.log.push(`${this.player.name} gains a soul shard! (${warlock.soulShards}/${warlock.maxSoulShards})`);
+            }
+        }
+        
         // Remove from enemies array
         const enemyIndex = this.enemies.findIndex(e => e.id === enemyId);
         if (enemyIndex !== -1) {
