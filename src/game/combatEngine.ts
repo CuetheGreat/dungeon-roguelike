@@ -1342,7 +1342,7 @@ export class CombatEngine {
 
     /**
      * Start the current combatant's turn.
-     * Processes status effects and returns whether they can act.
+     * Processes status effects, ticks cooldowns, and returns whether they can act.
      * 
      * @returns StatusEffectTickResult with turn start information
      */
@@ -1359,6 +1359,11 @@ export class CombatEngine {
             };
         }
 
+        // Tick player cooldowns and buffs at start of their turn
+        if (current.combatant.isPlayer) {
+            this.player.endTurn(); // This ticks cooldowns and buffs
+        }
+
         // Process status effects at turn start
         return this.processStatusEffects(current.combatant.id);
     }
@@ -1366,17 +1371,10 @@ export class CombatEngine {
     /**
      * Advance to the next turn.
      * Handles round advancement when all combatants have acted.
-     * Ticks player cooldowns and buffs at end of player's turn.
      */
     nextTurn(): TurnOrderEntry | null {
         if (this.state.status !== CombatStatus.IN_PROGRESS) {
             return null;
-        }
-
-        // Tick player cooldowns at end of their turn
-        const currentTurn = this.getCurrentTurn();
-        if (currentTurn?.combatant.isPlayer) {
-            this.player.endTurn();
         }
 
         this.state.currentTurnIndex++;
