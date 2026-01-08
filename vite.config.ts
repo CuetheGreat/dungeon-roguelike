@@ -6,9 +6,18 @@ export default defineConfig({
   plugins: [react()],
   root: '.',
   publicDir: 'public',
+  base: './', // Use relative paths for GitHub Pages
   build: {
-    outDir: 'dist-web',
-    emptyOutDir: true,
+    outDir: 'public',
+    emptyOutDir: false, // Don't delete existing public files (styles.css, etc.)
+    rollupOptions: {
+      output: {
+        // Put JS in assets folder
+        entryFileNames: 'assets/[name]-[hash].js',
+        chunkFileNames: 'assets/[name]-[hash].js',
+        assetFileNames: 'assets/[name]-[hash].[ext]',
+      },
+    },
   },
   resolve: {
     alias: {
