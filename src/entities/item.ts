@@ -134,6 +134,8 @@ export interface StatBonus {
     critChance?: number;
     /** Bonus to critical hit multiplier */
     critMultiplier?: number;
+    /** Bonus to spell power (affects spell damage and spell attack) */
+    spellPower?: number;
 }
 
 /** How to interpret the damage value for granted abilities */
@@ -144,6 +146,9 @@ export type GrantedAbilityHealingCalc = 'flat' | 'percent_max_hp';
 
 /** Who the granted ability targets */
 export type GrantedAbilityTarget = 'enemy' | 'self' | 'all_enemies';
+
+/** Type of granted ability - determines hit calculation and scaling */
+export type GrantedAbilityType = 'spell' | 'physical' | 'status_buff' | 'status_debuff';
 
 /**
  * Ability granted by an item when equipped.
@@ -164,18 +169,24 @@ export interface GrantedAbility {
     /** Current cooldown remaining (0 = ready to use) */
     currentCooldown: number;
     
-    // === Targeting ===
+    // === Type & Targeting ===
+    /** Type of ability - determines hit calculation and scaling */
+    abilityType?: GrantedAbilityType;
     /** Who the ability targets (default: 'enemy') */
     targetType?: GrantedAbilityTarget;
     
     // === Damage ===
-    /** Damage value */
+    /** Damage dice for physical abilities (e.g., "2d6") */
+    damageDice?: string;
+    /** Damage dice for spell abilities (e.g., "1d10") - scales with level */
+    spellDamageDice?: string;
+    /** Damage value (for flat damage or bonus) */
     damage?: number;
     /** How to calculate damage: 'flat' or 'multiplier' */
     damageCalc?: GrantedAbilityDamageCalc;
     /** Damage type (for display/resistance purposes) */
     damageType?: DamageType;
-    /** Level scaling multiplier for flat damage */
+    /** Level scaling multiplier for flat damage (DEPRECATED, use spellDamageDice) */
     levelScaling?: number;
     
     // === Healing ===

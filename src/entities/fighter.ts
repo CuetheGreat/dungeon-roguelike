@@ -10,7 +10,7 @@
  * @module entities/fighter
  */
 
-import { Item } from './item';
+import { Item, ItemType, ItemSlot, ItemRarity, DamageType, createItem } from './item';
 import { Player, PlayerClass, PlayerJSON } from './player';
 
 /**
@@ -59,10 +59,13 @@ export class Fighter extends Player {
     }
 
     /**
-     * Initializes Fighter-specific abilities.
+     * Initializes Fighter-specific abilities and starting equipment.
      * @protected
      */
     protected initializeAbilities(): void {
+        // Equip starting weapon
+        this.equipStartingWeapon();
+        
         this.abilities = [
             {
                 id: 'power_strike',
@@ -72,6 +75,7 @@ export class Fighter extends Player {
                 cooldown: 1,
                 currentCooldown: 0,
                 source: 'class',
+                abilityType: 'physical',
                 targetType: 'enemy',
                 damage: 1.5,
                 damageCalc: 'multiplier'
@@ -79,15 +83,17 @@ export class Fighter extends Player {
             {
                 id: 'shield_bash',
                 name: 'Shield Bash',
-                description: 'Bash the enemy, dealing moderate damage and stunning them for 1 turn.',
+                description: 'Bash the enemy, dealing moderate damage and stunning them for 1 turn (CON save).',
                 manaCost: 15,
                 cooldown: 3,
                 currentCooldown: 0,
                 source: 'class',
+                abilityType: 'physical',
                 targetType: 'enemy',
                 damage: 0.75,
                 damageCalc: 'multiplier',
-                statusEffect: { type: 'stun', duration: 1 }
+                statusEffect: { type: 'stun', duration: 1 },
+                saveType: 'constitution'
             },
             {
                 id: 'battle_cry',
@@ -97,6 +103,7 @@ export class Fighter extends Player {
                 cooldown: 5,
                 currentCooldown: 0,
                 source: 'class',
+                abilityType: 'status_buff',
                 targetType: 'self',
                 selfBuff: { type: 'strengthen', duration: 3, value: 25 }
             },
@@ -108,6 +115,7 @@ export class Fighter extends Player {
                 cooldown: 6,
                 currentCooldown: 0,
                 source: 'class',
+                abilityType: 'status_buff',
                 targetType: 'self',
                 healing: 30,
                 healingCalc: 'percent_max_hp'
@@ -120,6 +128,7 @@ export class Fighter extends Player {
                 cooldown: 4,
                 currentCooldown: 0,
                 source: 'class',
+                abilityType: 'physical',
                 targetType: 'all_enemies',
                 damage: 0.75,
                 damageCalc: 'multiplier'
@@ -170,7 +179,7 @@ export class Fighter extends Player {
         if (!ability) return null;
 
         // Apply buff using the new buff system
-        const attackBonus = Math.floor(this.stats.attack * 0.25);
+        const attackBonus = Math.floor(this.getAttackPower() * 0.25);
         this.applyBuff('Battle Cry', { attack: attackBonus }, 3);
 
         return { attackBonus, duration: 3 };
@@ -215,7 +224,7 @@ export class Fighter extends Player {
     checkLastStand(): { defenseBonus: number; active: boolean } {
         const healthPercent = this.stats.health / this.getMaxHealth();
         if (healthPercent <= 0.25) {
-            return { defenseBonus: Math.floor(this.stats.defense * 0.5), active: true };
+            return { defenseBonus: Math.floor(this.getDefense() * 0.5), active: true };
         }
         return { defenseBonus: 0, active: false };
     }
@@ -282,5 +291,26 @@ export class Fighter extends Player {
         fighter.activeBuffs = data.activeBuffs.map(b => ({ ...b }));
         
         return fighter;
+    }
+
+    // =========================================================================
+    // STARTING EQUIPMENT
+    // =========================================================================
+
+    /**
+     * Equips the Fighter's starting weapon - an Iron Longsword.
+     * @private
+     */
+    private equipStartingWeapon(): void {
+        this.equipment.weapon = createItem({
+            id: 'fighter_starting_sword',
+            name: 'Iron Longsword',
+            type: ItemType.WEAPON,
+            slot: ItemSlot.WEAPON,
+            rarity: ItemRarity.COMMON,
+            description: 'A sturdy blade, well-balanced for both offense and defense.',
+            damage: { dice: '1d8', type: DamageType.SLASHING },
+            value: 15
+        });
     }
 }

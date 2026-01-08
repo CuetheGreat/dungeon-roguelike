@@ -58,6 +58,23 @@ export enum EnemyType {
  * Represents an enemy entity with combat statistics.
  * @interface
  */
+/**
+ * Enemy ability scores (D&D-style).
+ * Used for saving throws and ability checks.
+ */
+export interface EnemyAbilityScores {
+    strength: number;
+    dexterity: number;
+    constitution: number;
+    intelligence: number;
+    wisdom: number;
+    charisma: number;
+}
+
+/**
+ * Represents an enemy entity in combat.
+ * @interface
+ */
 export interface Enemy {
     /** Unique identifier for the enemy instance */
     id: string;
@@ -81,6 +98,10 @@ export interface Enemy {
     speed: number;
     /** URL to the monster's image (from D&D 5e API) */
     imageUrl?: string;
+    /** Enemy ability scores for saving throws */
+    abilityScores?: EnemyAbilityScores;
+    /** Proficiency bonus (derived from CR in D&D) */
+    proficiencyBonus?: number;
 }
 
 /**
@@ -117,6 +138,15 @@ interface MonsterAPIResponse {
     }>;
     /** Path to monster image (relative to API base) */
     image?: string;
+    /** Ability scores from D&D 5e API */
+    strength?: number;
+    dexterity?: number;
+    constitution?: number;
+    intelligence?: number;
+    wisdom?: number;
+    charisma?: number;
+    /** Proficiency bonus from D&D 5e API */
+    proficiency_bonus?: number;
 }
 
 /**
@@ -309,6 +339,17 @@ export class MonsterAPI {
         // Construct full image URL if image path is provided
         const imageUrl = data.image ? `${this.API_BASE}${data.image}` : undefined;
 
+        // Extract ability scores if available from API
+        const abilityScores: EnemyAbilityScores | undefined = 
+            (data.strength !== undefined) ? {
+                strength: data.strength ?? 10,
+                dexterity: data.dexterity ?? 10,
+                constitution: data.constitution ?? 10,
+                intelligence: data.intelligence ?? 10,
+                wisdom: data.wisdom ?? 10,
+                charisma: data.charisma ?? 10
+            } : undefined;
+
         return {
             id: data.index,
             name: data.name,
@@ -320,7 +361,9 @@ export class MonsterAPI {
             challengeRating: data.challenge_rating ?? 0,
             type,
             speed,
-            imageUrl
+            imageUrl,
+            abilityScores,
+            proficiencyBonus: data.proficiency_bonus
         };
     }
 

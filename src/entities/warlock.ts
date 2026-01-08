@@ -11,7 +11,7 @@
  */
 
 import { Player, PlayerClass, PlayerJSON } from './player';
-import { Item } from './item';
+import { Item, ItemType, ItemSlot, ItemRarity, DamageType, createItem } from './item';
 import { getRNG, isRNGInitialized } from '../game/seed';
 
 /**
@@ -76,63 +76,65 @@ export class Warlock extends Player {
     }
 
     /**
-     * Initializes Warlock-specific abilities.
+     * Initializes Warlock-specific abilities and starting equipment.
      * @protected
      */
     protected initializeAbilities(): void {
+        // Equip starting weapon
+        this.equipStartingWeapon();
+        
         this.abilities = [
             {
                 id: 'eldritch_blast',
                 name: 'Eldritch Blast',
-                description: 'Fire a beam of crackling energy, dealing magic damage.',
+                description: 'Fire a beam of crackling energy. Damage scales with level (+1d10 every 4 levels).',
                 manaCost: 6,
                 cooldown: 2,
                 currentCooldown: 0,
                 source: 'class',
+                abilityType: 'spell',
                 targetType: 'enemy',
-                damage: 8,
-                damageCalc: 'flat',
-                levelScaling: 1.0
+                spellDamageDice: '1d10' // Level 1-4: 1d10, 5-8: 2d10, 9-12: 3d10, etc.
             },
             {
                 id: 'drain_life',
                 name: 'Drain Life',
-                description: 'Siphon life from an enemy, dealing damage and healing yourself for 40% of damage dealt.',
+                description: 'Siphon life from an enemy, healing for 40% of damage dealt. Scales with level.',
                 manaCost: 15,
                 cooldown: 3,
                 currentCooldown: 0,
                 source: 'class',
+                abilityType: 'spell',
                 targetType: 'enemy',
-                damage: 6,
-                damageCalc: 'flat',
-                levelScaling: 0.8,
+                spellDamageDice: '1d8', // Slightly lower than Eldritch Blast due to lifesteal
                 lifestealPercent: 40
             },
             {
                 id: 'hex',
                 name: 'Hex',
-                description: 'Curse an enemy, increasing damage they take by 20% for 3 turns.',
+                description: 'Curse an enemy (WIS save), increasing damage they take by 20% for 3 turns.',
                 manaCost: 12,
                 cooldown: 4,
                 currentCooldown: 0,
                 source: 'class',
+                abilityType: 'status_debuff',
                 targetType: 'enemy',
+                saveType: 'wisdom',
                 statusEffect: { type: 'vulnerable', duration: 3, value: 20 }
             },
             {
                 id: 'shadow_bolt',
                 name: 'Shadow Bolt',
-                description: 'Hurl a bolt of shadow energy. Consumes soul shards for bonus damage.',
+                description: 'Hurl a bolt of shadow energy. Consumes soul shards for +1d6 bonus damage each.',
                 manaCost: 18,
                 cooldown: 2,
                 currentCooldown: 0,
                 source: 'class',
+                abilityType: 'spell',
                 targetType: 'enemy',
-                damage: 12,
-                damageCalc: 'flat',
-                levelScaling: 1.2,
+                spellDamageDice: '2d6', // Higher base but slower scaling
                 consumesShards: true,
-                damagePerShard: 4
+                damagePerShard: 4 // +4 per shard consumed
             },
             {
                 id: 'dark_pact',
@@ -142,6 +144,7 @@ export class Warlock extends Player {
                 cooldown: 5,
                 currentCooldown: 0,
                 source: 'class',
+                abilityType: 'status_buff',
                 targetType: 'self',
                 resourceCost: { type: 'health', percent: 15 },
                 resourceGain: { type: 'mana', percent: 30 }
@@ -149,14 +152,14 @@ export class Warlock extends Player {
             {
                 id: 'soul_harvest',
                 name: 'Soul Harvest',
-                description: 'Passive: Killing an enemy grants a soul shard (max 3). Active: Consume all shards to deal damage.',
+                description: 'Consume all soul shards to deal 1d12 damage per shard. Scales with level.',
                 manaCost: 25,
                 cooldown: 6,
                 currentCooldown: 0,
                 source: 'class',
+                abilityType: 'spell',
                 targetType: 'enemy',
-                damage: 10,
-                damageCalc: 'flat',
+                spellDamageDice: '1d12', // High damage die, multiplied by shards
                 levelScaling: 1.5,
                 consumesShards: true,
                 damagePerShard: 0, // Base damage IS per shard for this ability
@@ -407,5 +410,28 @@ export class Warlock extends Player {
         warlock.activeBuffs = data.activeBuffs.map(b => ({ ...b }));
         
         return warlock;
+    }
+
+    // =========================================================================
+    // STARTING EQUIPMENT
+    // =========================================================================
+
+    /**
+     * Equips the Warlock's starting weapon - an Eldritch Focus.
+     * A magical focus that channels dark energy.
+     * @private
+     */
+    private equipStartingWeapon(): void {
+        this.equipment.weapon = createItem({
+            id: 'warlock_starting_focus',
+            name: 'Eldritch Focus',
+            type: ItemType.WEAPON,
+            slot: ItemSlot.WEAPON,
+            rarity: ItemRarity.COMMON,
+            description: 'A dark crystal orb that channels eldritch energy.',
+            damage: { dice: '1d6', type: DamageType.MAGIC },
+            bonuses: { maxMana: 5 },
+            value: 15
+        });
     }
 }

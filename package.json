@@ -1,26 +1,34 @@
 {
   "name": "dungeon-roguelike",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "A turn-based dungeon roguelike game",
   "main": "index.js",
   "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
     "test": "vitest",
-    "start": "npx tsx src/main.ts",
-    "build": "tsc",
-    "map": "npx tsx src/generate-html.ts",
-    "dev": "esbuild src/ui/webEntry.ts --bundle --outfile=public/game.js --sourcemap --watch --format=esm",
-    "build:web": "esbuild src/ui/webEntry.ts --bundle --outfile=public/game.js --minify --format=esm",
-    "serve": "npx serve public"
+    "start:legacy": "npx tsx src/main.ts",
+    "build:legacy": "esbuild src/ui/webEntry.ts --bundle --outfile=public/game.js --minify --format=esm",
+    "serve:legacy": "npx serve public"
   },
-  "keywords": ["roguelike", "dungeon", "game", "typescript"],
+  "keywords": ["roguelike", "dungeon", "game", "typescript", "react"],
   "author": "",
   "license": "ISC",
   "type": "module",
+  "dependencies": {
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
   "devDependencies": {
     "@types/node": "^25.0.3",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "@vitejs/plugin-react": "^4.5.2",
     "esbuild": "^0.24.0",
     "serve": "^14.2.4",
     "typescript": "^5.9.3",
+    "vite": "^6.3.5",
     "vitest": "^3.2.4"
   }
 }

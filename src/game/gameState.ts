@@ -15,9 +15,12 @@ import { Room, RoomState, RoomType } from "../dungeon/room";
 import { DungeonLayer } from "./seed";
 import { CombatState } from "./combatEngine";
 import { Fighter } from "../entities/fighter";
-import { DungeonGenerator } from "../integration/dungeonGenerator";
 import { Warlock } from "../entities/warlock";
+import { BloodAssassin } from "../entities/bloodAssassin";
+import { Zephyr } from "../entities/zephyr";
+import { DungeonGenerator } from "../integration/dungeonGenerator";
 import { Item, ItemType, ItemSlot } from "../entities/item";
+import { Relic } from "../entities/relic";
 import { getSellPrice } from "../entities/itemDatabase";
 import { getRNG, isRNGInitialized } from "./seed";
 import { 
@@ -129,6 +132,24 @@ export interface Action {
     abilityId?: string;
     /** Ability display name for 'ability' actions */
     abilityName?: string;
+    /** Full ability data for tooltips */
+    abilityData?: {
+        description: string;
+        manaCost: number;
+        cooldown: number;
+        abilityType?: string;
+        spellDamageDice?: string;
+        damageDice?: string;
+        damage?: number;
+        damageCalc?: string;
+        healing?: number;
+        healingCalc?: string;
+        lifestealPercent?: number;
+        statusEffect?: { type: string; duration: number; value?: number };
+        selfBuff?: { type: string; duration: number; value?: number };
+        targetType?: string;
+        saveType?: string;
+    };
     /** Item ID for 'use_item' actions */
     itemId?: string;
     /** Item display name for 'use_item' actions */
@@ -270,7 +291,7 @@ export class GameStateManager {
      * console.log(state.player?.name); // 'Merlin'
      * ```
      */
-    startNewGame(playerClass: 'fighter' | 'warlock', playerName: string, seed: string): GameState {
+    startNewGame(playerClass: 'fighter' | 'warlock' | 'blood_assassin' | 'zephyr', playerName: string, seed: string): GameState {
         let player: Player
         switch (playerClass) {
             case 'fighter':
@@ -278,6 +299,12 @@ export class GameStateManager {
                 break;
             case 'warlock':
                 player = new Warlock(playerName);
+                break;
+            case 'blood_assassin':
+                player = new BloodAssassin(playerName);
+                break;
+            case 'zephyr':
+                player = new Zephyr(playerName);
                 break;
         }
         const dungeon = new DungeonGenerator(seed);
@@ -345,9 +372,8 @@ export class GameStateManager {
      * Gets the Room object for the player's current location.
      * 
      * @returns The current Room or null if not in a room
-     * @private
      */
-    private getCurrentRoom(): Room | null {
+    getCurrentRoom(): Room | null {
         const { dungeon } = this.currentGameState;
         if (!dungeon.currentRoomId) {
             return null;
@@ -452,8 +478,9 @@ export class GameStateManager {
 
         // 9. Load enemies if entering a hostile room (lazy loading)
         // This must happen BEFORE determining phase, since phase depends on enemies being present
+        // Enemy CR is now based on player level, not room level
         if (targetRoom.isHostileRoom()) {
-            await targetRoom.ensureEnemiesLoaded();
+            await targetRoom.ensureEnemiesLoaded(this.currentGameState.player.level);
         }
 
         // 10. Determine phase based on room type (now that enemies are loaded)
@@ -509,7 +536,7 @@ export class GameStateManager {
     /**
      * Result of completing a room, including rewards granted.
      */
-    public lastRoomRewards: { gold: number; experience: number; items: Item[]; healthRestore?: number } | null = null;
+    public lastRoomRewards: { gold: number; experience: number; items: Item[]; healthRestore?: number; relic?: Relic } | null = null;
 
     /**
      * Completes the current room and grants rewards to the player.
@@ -554,6 +581,10 @@ export class GameStateManager {
             if (rewards.healthRestore) {
                 player.heal(rewards.healthRestore);
             }
+            // Add relic if one was dropped (guaranteed from elite rooms)
+            if (rewards.relic) {
+                player.addRelic(rewards.relic);
+            }
         }
 
         this.currentGameState.stats.goldCollected += rewards.gold;
@@ -565,7 +596,8 @@ export class GameStateManager {
             gold: rewards.gold,
             experience: rewards.experience,
             items: [...rewards.items],
-            healthRestore: rewards.healthRestore
+            healthRestore: rewards.healthRestore,
+            relic: rewards.relic
         };
 
         if (currentRoom.type === RoomType.BOSS) {
@@ -582,7 +614,7 @@ export class GameStateManager {
      * Gets and clears the last room rewards (for display purposes).
      * @returns The rewards from the last completed room, or null if none
      */
-    getAndClearLastRewards(): { gold: number; experience: number; items: Item[]; healthRestore?: number } | null {
+    getAndClearLastRewards(): { gold: number; experience: number; items: Item[]; healthRestore?: number; relic?: Relic } | null {
         const rewards = this.lastRoomRewards;
         this.lastRoomRewards = null;
         return rewards;
@@ -650,7 +682,28 @@ export class GameStateManager {
                 // Abilities (if not on cooldown and have mana)
                 for (const ability of player.getAllAbilities()) {
                     if (ability.currentCooldown === 0 && player.stats.mana >= ability.manaCost) {
-                        actions.push({ type: 'ability', abilityId: ability.id, name: ability.name })
+                        actions.push({ 
+                            type: 'ability', 
+                            abilityId: ability.id, 
+                            name: ability.name,
+                            abilityData: {
+                                description: ability.description,
+                                manaCost: ability.manaCost,
+                                cooldown: ability.cooldown,
+                                abilityType: ability.abilityType,
+                                spellDamageDice: ability.spellDamageDice,
+                                damageDice: ability.damageDice,
+                                damage: ability.damage,
+                                damageCalc: ability.damageCalc,
+                                healing: ability.healing,
+                                healingCalc: ability.healingCalc,
+                                lifestealPercent: ability.lifestealPercent,
+                                statusEffect: ability.statusEffect,
+                                selfBuff: ability.selfBuff,
+                                targetType: ability.targetType,
+                                saveType: ability.saveType
+                            }
+                        });
                     }
                 }
 

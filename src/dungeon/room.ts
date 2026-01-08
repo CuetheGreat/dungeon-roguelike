@@ -26,6 +26,7 @@ import { Interactable, InteractableType, createInteractable, interact, Interacti
 import { getRNG, isRNGInitialized } from '../game/seed';
 import { MysteriousEvent, generateMysteriousEvent } from '../events/mysteriousEvent';
 import { Puzzle, generatePuzzle } from '../puzzles/puzzle';
+import { Relic, generateRandomRelic, cloneRelic } from '../entities/relic';
 
 /**
  * Types of rooms that can appear in the dungeon.
@@ -81,6 +82,8 @@ export interface Reward {
     experience: number;
     /** Optional health restoration (for rest rooms) */
     healthRestore?: number;
+    /** Optional relic reward (guaranteed from elite rooms) */
+    relic?: Relic;
 }
 
 /**
@@ -165,40 +168,40 @@ const REWARD_CONSTANTS = {
 export class Room {
     /** Unique identifier for the room */
     public readonly id: string = crypto.randomUUID();
-    
+
     /** The type of room (combat, treasure, shop, etc.) */
     public type: RoomType;
-    
+
     /** The dungeon level this room is on (1-20) */
     public level: number;
-    
+
     /** Current state of the room (locked, available, active, cleared) */
     public state: RoomState;
-    
+
     /** IDs of rooms connected to this one */
     public connections: string[];
-    
+
     /** Rewards granted upon completing the room */
     public reward: Reward;
-    
+
     /** Enemies present in hostile rooms */
     public enemies?: Enemy[];
-    
+
     /** Whether enemies have been loaded from API (for lazy loading) */
     private enemiesLoaded: boolean = false;
-    
+
     /** Interactable objects in the room (chests, traps, altars, etc.) */
     public interactables: Interactable[] = [];
-    
+
     /** Flavor text description of the room */
     public description: string;
-    
+
     /** Mysterious event for EVENT rooms (generated on first enter) */
     public event?: MysteriousEvent;
-    
+
     /** Shop inventory for SHOP rooms (generated on first enter) */
     public shopInventory?: ShopItem[];
-    
+
     /** Puzzle for PUZZLE rooms (generated on first enter) */
     public puzzle?: Puzzle;
 
@@ -298,17 +301,17 @@ export class Room {
         }
 
         this.state = RoomState.ACTIVE;
-        
+
         // Generate event for EVENT rooms on first enter
         if (this.type === RoomType.EVENT && !this.event) {
             this.event = generateMysteriousEvent(this.level);
         }
-        
+
         // Generate shop inventory for SHOP rooms on first enter
         if (this.type === RoomType.SHOP && !this.shopInventory) {
             this.shopInventory = generateShopInventory(this.level);
         }
-        
+
         // Generate puzzle for PUZZLE rooms on first enter
         if (this.type === RoomType.PUZZLE && !this.puzzle) {
             this.puzzle = generatePuzzle(this.level);
@@ -322,22 +325,23 @@ export class Room {
      * 
      * Safe to call multiple times - will only fetch once.
      * 
+     * @param playerLevel - The player's current level (used for enemy CR scaling). Defaults to room level.
      * @returns Promise that resolves when enemies are loaded (or immediately if not needed)
      * 
      * @example
      * ```typescript
-     * // Before entering combat, ensure enemies are loaded
-     * await room.ensureEnemiesLoaded();
+     * // Before entering combat, ensure enemies are loaded based on player level
+     * await room.ensureEnemiesLoaded(player.level);
      * const enemies = room.enemies; // Now populated
      * ```
      */
-    async ensureEnemiesLoaded(): Promise<void> {
+    async ensureEnemiesLoaded(playerLevel: number = this.level): Promise<void> {
         // Skip if already loaded or not a hostile room
         if (this.enemiesLoaded || !this.isHostileRoom()) {
             return;
         }
-        
-        await this.populateEnemies();
+
+        await this.populateEnemies(playerLevel);
         this.enemiesLoaded = true;
     }
 
@@ -434,11 +438,18 @@ export class Room {
         const gold = Math.floor(BASE_GOLD * goldMultiplier * this.level);
         const experience = Math.floor(BASE_XP * xpMultiplier * this.level);
 
-        return {
+        const reward: Reward = {
             items: this.generateItems(),
             gold,
             experience
         };
+
+        // Elite rooms guarantee a relic drop
+        if (this.type === RoomType.ELITE) {
+            reward.relic = cloneRelic(generateRandomRelic(this.level));
+        }
+
+        return reward;
     }
 
     /**
@@ -494,11 +505,17 @@ export class Room {
     /**
      * Fetches and assigns enemies to this room from the D&D 5e API.
      * Enemy count and difficulty scales with room type and level.
-     * Boss and Elite rooms always have exactly 1 enemy.
+     * Boss and Elite rooms always have exactly 1 enemy at full CR.
+     * 
+     * CR is adjusted based on enemy count to balance encounters:
+     * - 1 enemy: full CR (playerLevel)
+     * - 2 enemies: CR - 1 each
+     * - 3 enemies: CR - 2 each
+     * - etc.
      * 
      * @returns Promise that resolves when enemies are populated
      */
-    async populateEnemies(): Promise<void> {
+    async populateEnemies(playerLevel: number = this.level): Promise<void> {
         if (!this.isHostileRoom()) return;
 
         // Generate 1-3 enemies based on room type
@@ -513,7 +530,12 @@ export class Room {
             count = Math.min(baseCount, maxEnemies);
         }
 
-        this.enemies = await MonsterAPI.getRandomMonstersByCR(this.level, count);
+        // Adjust CR based on enemy count to balance encounters
+        // More enemies = lower CR each, keeping total difficulty similar
+        const crAdjustment = count - 1; // 1 enemy = 0, 2 enemies = -1, 3 enemies = -2
+        const adjustedCR = Math.max(1, playerLevel - crAdjustment);
+
+        this.enemies = await MonsterAPI.getRandomMonstersByCR(adjustedCR, count);
     }
 
     /**
@@ -664,11 +686,11 @@ export class Room {
         };
 
         // Atmosphere modifiers based on level depth
-        const depthAtmosphere = this.level <= 5 
+        const depthAtmosphere = this.level <= 5
             ? pick(['dimly lit', 'musty', 'damp', 'echoing', 'shadowy'])
             : this.level <= 12
-            ? pick(['ominous', 'foreboding', 'ancient', 'crumbling', 'haunted'])
-            : pick(['malevolent', 'corrupted', 'suffocating', 'nightmarish', 'abyssal']);
+                ? pick(['ominous', 'foreboding', 'ancient', 'crumbling', 'haunted'])
+                : pick(['malevolent', 'corrupted', 'suffocating', 'nightmarish', 'abyssal']);
 
         const descriptions: Record<RoomType, string[]> = {
             [RoomType.ENTRANCE]: [

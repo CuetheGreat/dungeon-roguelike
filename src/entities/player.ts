@@ -38,7 +38,11 @@ export enum PlayerClass {
     /** Melee warrior with high health and defense */
     FIGHTER = 'fighter',
     /** Magic user with high mana and powerful spells */
-    WARLOCK = 'warlock'
+    WARLOCK = 'warlock',
+    /** Hemomancy-focused hybrid with health sacrifice mechanics */
+    BLOOD_ASSASSIN = 'blood_assassin',
+    /** Wind sorcerer with high mobility and evasion */
+    ZEPHYR = 'zephyr'
 }
 
 /**
@@ -56,29 +60,31 @@ export interface Equipment {
 }
 
 /**
+ * Ability scores for a player character.
+ * @interface
+ */
+export interface AbilityScores {
+    Strength: number;
+    Dexterity: number;
+    Constitution: number;
+    Intelligence: number;
+    Wisdom: number;
+    Charisma: number;
+    Luck: number;
+}
+
+/**
  * Base stats for a player character.
  * These values are modified by equipment, buffs, and level.
  * @interface
  */
 export interface PlayerStats {
-    /** Maximum health points */
-    maxHealth: number;
     /** Current health points */
     health: number;
-    /** Base attack power (modified by weapon and class) */
-    attack: number;
-    /** Base defense (modified by armor and class) */
-    defense: number;
     /** Current mana/resource pool for abilities */
     mana: number;
-    /** Maximum mana */
-    maxMana: number;
-    /** Speed/initiative for turn order */
-    speed: number;
-    /** Critical hit chance (0-100) */
-    critChance: number;
-    /** Critical hit damage multiplier (e.g., 1.5 = 150% damage) */
-    critMultiplier: number;
+    /** Base stats */
+    abilityScores: AbilityScores;
 }
 
 /**
@@ -103,6 +109,21 @@ export type HealingCalculation = 'flat' | 'percent_max_hp';
 
 /** Who the ability targets */
 export type AbilityTarget = 'enemy' | 'self' | 'all_enemies';
+
+/** 
+ * Type of ability - determines how it hits and scales.
+ * - 'spell': Uses spell attack (INT, WIS, CHA mod), scales by adding a d# (damage dice) to the spells damage every 4 levels
+ * - 'physical': Uses attack roll (STR,DEX mod), uses damage dice + modifier
+ * - 'status_buff': Applies beneficial effect to self, usually auto-hits
+ * - 'status_debuff': Applies negative effect to enemy, target rolls saving throw
+ */
+export type AbilityType = 'spell' | 'physical' | 'status_buff' | 'status_debuff';
+
+/**
+ * Ability score used for saving throws.
+ * Target rolls d20 + ability modifier vs caster's save DC.
+ */
+export type SaveType = 'strength' | 'dexterity' | 'constitution' | 'intelligence' | 'wisdom' | 'charisma';
 
 /** Status effect to apply with an ability */
 export interface AbilityStatusEffect {
@@ -155,19 +176,33 @@ export interface Ability {
     currentCooldown: number;
     /** Source of the ability ('class' or item name) */
     source?: string;
-    
+
     // === Targeting ===
     /** Who the ability targets (default: 'enemy') */
     targetType?: AbilityTarget;
-    
+
+    /** Type of ability - determines hit calculation and scaling */
+    abilityType?: AbilityType;
+
     // === Damage ===
-    /** Damage value (interpretation depends on damageCalc) */
+    /** 
+     * Damage dice for physical abilities (e.g., "2d6", "1d10").
+     * Rolled and added to STR/DEX modifier for physical attacks.
+     */
+    damageDice?: string;
+    /**
+     * Damage dice for spell abilities (e.g., "1d10", "2d6").
+     * Scales with level: +1 die every 4 levels (like D&D cantrips).
+     * Level 1-4: 1 die, Level 5-8: 2 dice, Level 9-12: 3 dice, etc.
+     */
+    spellDamageDice?: string;
+    /** Damage value (for flat damage spells or bonus flat damage on physical) */
     damage?: number;
     /** How to calculate damage: 'flat' (base + level scaling) or 'multiplier' (% of basic attack) */
     damageCalc?: DamageCalculation;
-    /** Level scaling multiplier for flat damage (default: 1.0) */
+    /** Level scaling multiplier for flat damage (default: 1.0) - DEPRECATED, use spellDamageDice instead */
     levelScaling?: number;
-    
+
     // === Healing ===
     /** Healing value (interpretation depends on healingCalc) */
     healing?: number;
@@ -175,19 +210,25 @@ export interface Ability {
     healingCalc?: HealingCalculation;
     /** Percent of damage dealt to heal (lifesteal) */
     lifestealPercent?: number;
-    
+
     // === Status Effects ===
     /** Status effect to apply to target */
     statusEffect?: AbilityStatusEffect;
     /** Status effect to apply to self (buff) */
     selfBuff?: AbilityStatusEffect;
-    
+    /** 
+     * Saving throw type for status_debuff abilities.
+     * Target rolls d20 + ability modifier vs caster's save DC.
+     * If target succeeds, effect is resisted.
+     */
+    saveType?: SaveType;
+
     // === Resource Costs/Gains ===
     /** Additional resource cost (beyond mana) */
     resourceCost?: AbilityResourceCost;
     /** Resource gained from using ability */
     resourceGain?: AbilityResourceGain;
-    
+
     // === Special Flags ===
     /** Whether this ability uses soul shards for bonus damage */
     consumesShards?: boolean;
@@ -197,7 +238,7 @@ export interface Ability {
     fullRestore?: boolean;
     /** Whether this grants invulnerability */
     invulnerable?: boolean;
-    
+
     // === Legacy (for backwards compatibility during transition) ===
     /** @deprecated Use statusEffect instead */
     effect?: string;
@@ -252,56 +293,70 @@ export interface PlayerJSON {
 }
 
 /**
- * Base stat configurations per class.
+ * Base ability scores per class.
+ * All other stats (HP, MP, attack, defense, etc.) are derived from these.
  * @const
  */
-const CLASS_BASE_STATS: Record<PlayerClass, PlayerStats> = {
+const CLASS_BASE_ABILITY_SCORES: Record<PlayerClass, AbilityScores> = {
     [PlayerClass.FIGHTER]: {
-        maxHealth: 120,
-        health: 120,
-        attack: 14,
-        defense: 10,
-        mana: 30,
-        maxMana: 30,
-        speed: 25,
-        critChance: 15,
-        critMultiplier: 1.75
+        Strength: 16,      // +3 modifier - Fighters are strong
+        Dexterity: 14,     // +2 modifier
+        Constitution: 14,  // +2 modifier - Hardy
+        Intelligence: 10,  // +0 modifier
+        Wisdom: 12,        // +1 modifier
+        Charisma: 8,       // -1 modifier
+        Luck: 10           // +0 modifier
     },
     [PlayerClass.WARLOCK]: {
-        maxHealth: 80,
-        health: 80,
-        attack: 6,
-        defense: 6,
-        mana: 100,
-        maxMana: 100,
-        speed: 20,
-        critChance: 10,
-        critMultiplier: 1.75
+        Strength: 8,       // -1 modifier - Warlocks are weak
+        Dexterity: 12,     // +1 modifier
+        Constitution: 10,  // +0 modifier
+        Intelligence: 16,  // +3 modifier - Smart casters
+        Wisdom: 14,        // +2 modifier - Wise casters
+        Charisma: 14,      // +2 modifier - Charismatic
+        Luck: 12           // +1 modifier - Lucky charm
+    },
+    [PlayerClass.BLOOD_ASSASSIN]: {
+        Strength: 12,      // +1 modifier - Decent strength
+        Dexterity: 16,     // +3 modifier - Blood Assassins are agile
+        Constitution: 12,  // +1 modifier - Medium durability
+        Intelligence: 14,  // +2 modifier - Blood magic requires knowledge
+        Wisdom: 10,        // +0 modifier
+        Charisma: 10,      // +0 modifier
+        Luck: 12           // +1 modifier - Lucky criticals
+    },
+    [PlayerClass.ZEPHYR]: {
+        Strength: 8,       // -1 modifier - Zephyrs are physically weak
+        Dexterity: 16,     // +3 modifier - Wind grants agility
+        Constitution: 10,  // +0 modifier - Average durability
+        Intelligence: 14,  // +2 modifier - Wind magic requires study
+        Wisdom: 12,        // +1 modifier
+        Charisma: 14,      // +2 modifier - Charismatic wind dancers
+        Luck: 12           // +1 modifier - Winds of fortune
     }
 };
 
 /**
- * Stat growth per level per class.
+ * Ability score growth per level per class.
+ * These values are added to ability scores on each level up.
  * @const
  */
-const CLASS_STAT_GROWTH: Record<PlayerClass, Partial<PlayerStats>> = {
+const CLASS_ABILITY_GROWTH: Record<PlayerClass, Partial<AbilityScores>> = {
     [PlayerClass.FIGHTER]: {
-        maxHealth: 15,
-        attack: 2,
-        defense: 2,
-        mana: 5,
-        maxMana: 5,
-        speed: 1,
-        critChance: 0.5
+        Strength: 1,      // Fighters grow stronger
+        Constitution: 1   // And hardier
     },
     [PlayerClass.WARLOCK]: {
-        maxHealth: 8,
-        attack: 1,
-        defense: 1,
-        mana: 15,
-        maxMana: 15,
-        speed: 1,
-        critChance: 1
+        Intelligence: 1,  // Warlocks grow smarter
+        Charisma: 1       // And more charismatic
+    },
+    [PlayerClass.BLOOD_ASSASSIN]: {
+        Dexterity: 1,     // Blood Assassins grow more agile
+        Intelligence: 1   // And better at blood magic
+    },
+    [PlayerClass.ZEPHYR]: {
+        Dexterity: 1,     // Zephyrs grow more agile
+        Charisma: 1       // And more attuned to wind
     }
 };
 
@@ -384,7 +439,18 @@ export abstract class Player {
     constructor(name: string, playerClass: PlayerClass) {
         this.name = name;
         this.playerClass = playerClass;
-        this.stats = { ...CLASS_BASE_STATS[playerClass] };
+        
+        // Initialize stats with ability scores (health/mana derived after)
+        this.stats = {
+            health: 0,
+            mana: 0,
+            abilityScores: { ...CLASS_BASE_ABILITY_SCORES[playerClass] }
+        };
+        
+        // Set health and mana to max (derived from ability scores)
+        this.stats.health = this.getMaxHealth();
+        this.stats.mana = this.getMaxMana();
+        
         this.initializeAbilities();
     }
 
@@ -397,7 +463,38 @@ export abstract class Player {
     protected abstract initializeAbilities(): void;
 
     // =========================================================================
-    // STAT CALCULATIONS (with equipment and buff bonuses)
+    // ABILITY SCORE CALCULATIONS
+    // =========================================================================
+
+    /**
+     * Calculates the D&D-style modifier for an ability score.
+     * Formula: floor((score - 10) / 2)
+     * 
+     * @param score - The ability score value (typically 1-20+)
+     * @returns The modifier (-5 to +5 for typical scores)
+     * 
+     * @example
+     * getAbilityScoreModifier(10) // returns 0
+     * getAbilityScoreModifier(14) // returns +2
+     * getAbilityScoreModifier(8)  // returns -1
+     * getAbilityScoreModifier(18) // returns +4
+     */
+    getAbilityScoreModifier(score: number): number {
+        return Math.floor((score - 10) / 2);
+    }
+
+    /**
+     * Gets the modifier for a specific ability score by name.
+     * 
+     * @param ability - The ability score name
+     * @returns The calculated modifier
+     */
+    getModifier(ability: keyof AbilityScores): number {
+        return this.getAbilityScoreModifier(this.stats.abilityScores[ability]);
+    }
+
+    // =========================================================================
+    // STAT CALCULATIONS (derived from ability scores + bonuses)
     // =========================================================================
 
     /**
@@ -459,46 +556,135 @@ export abstract class Player {
     }
 
     /**
-     * Gets the effective attack power including equipment, buff, and relic bonuses.
-     * Includes weapon damage dice average.
+     * Gets the attack bonus (modifier added to weapon damage roll).
+     * Does NOT include weapon dice - those are rolled separately in combat.
      * 
-     * @returns Total attack power
+     * Formula: STR mod + class bonus + equipment/buff/relic bonuses
+     * 
+     * @returns Attack bonus to add to weapon damage
+     */
+    getAttackBonus(): number {
+        // Base attack from Strength modifier
+        const strMod = this.getModifier('Strength');
+        const classBonus = this.playerClass === PlayerClass.FIGHTER ? 2 : 0;
+        let bonus = strMod + classBonus;
+
+        // Add equipment bonuses (from items' attack stat, NOT weapon dice)
+        bonus += this.getEquipmentBonus('attack');
+
+        // Add buff bonuses
+        bonus += this.getBuffBonus('attack');
+
+        // Add relic bonuses
+        bonus += this.getRelicBonus('attack');
+
+        return bonus;
+    }
+
+    /**
+     * Gets the effective attack power for display purposes.
+     * Includes weapon damage dice average for UI stat display.
+     * 
+     * Formula: attack bonus + weapon damage average
+     * 
+     * @returns Total attack power (for display)
      */
     getAttackPower(): number {
-        let attack = this.stats.attack;
+        let attack = this.getAttackBonus();
 
-        // Add weapon damage dice average
+        // Add weapon damage dice average (for display only)
         if (this.equipment.weapon?.damage) {
             attack += calculateAverageDamage(this.equipment.weapon.damage.dice);
         }
 
-        // Add equipment bonuses
-        attack += this.getEquipmentBonus('attack');
-
-        // Add buff bonuses
-        attack += this.getBuffBonus('attack');
-
-        // Add relic bonuses
-        attack += this.getRelicBonus('attack');
-
-        return Math.floor(attack);
+        return Math.floor(Math.max(1, attack)); // Minimum 1 attack
     }
 
     /**
-     * Gets the effective defense including equipment, buff, and relic bonuses.
-     * Includes armor class from equipped armor.
+     * Gets the spell attack bonus (modifier added to spell attack rolls).
+     * Used for determining if spells hit (d20 + spell attack vs AC).
+     * 
+     * Formula: INT mod + level/2 (proficiency) + equipment/buff/relic bonuses
+     * 
+     * @returns Spell attack bonus to add to d20 roll
+     */
+    getSpellAttackBonus(): number {
+        // Base spell attack from Intelligence modifier
+        const intMod = this.getModifier('Intelligence');
+        
+        // Proficiency bonus scales with level (similar to D&D)
+        const proficiencyBonus = Math.floor(this.level / 2) + 1;
+        
+        let bonus = intMod + proficiencyBonus;
+
+        // Add equipment bonuses (spellPower affects spell attack)
+        bonus += this.getEquipmentBonus('spellPower');
+
+        // Add buff bonuses
+        bonus += this.getBuffBonus('spellPower');
+
+        // Add relic bonuses
+        bonus += this.getRelicBonus('spellPower');
+
+        return bonus;
+    }
+
+    /**
+     * Gets the spell save DC (Difficulty Class) for status effects.
+     * Targets must roll d20 + their ability modifier >= this DC to resist.
+     * 
+     * Formula: 8 + INT mod + proficiency (level/2 + 1)
+     * 
+     * @returns Spell save DC
+     */
+    getSpellSaveDC(): number {
+        const intMod = this.getModifier('Intelligence');
+        const proficiencyBonus = Math.floor(this.level / 2) + 1;
+        return 8 + intMod + proficiencyBonus;
+    }
+
+    /**
+     * Gets the physical save DC for status effects from physical abilities.
+     * Uses STR modifier instead of INT.
+     * 
+     * Formula: 8 + STR mod + proficiency (level/2 + 1)
+     * 
+     * @returns Physical save DC
+     */
+    getPhysicalSaveDC(): number {
+        const strMod = this.getModifier('Strength');
+        const proficiencyBonus = Math.floor(this.level / 2) + 1;
+        return 8 + strMod + proficiencyBonus;
+    }
+
+    /**
+     * Gets the effective defense (AC) derived from Dexterity modifier.
+     * Formula: 10 + DEX mod + armor class + equipment/buff/relic bonuses
      * 
      * @returns Total defense value
      */
     getDefense(): number {
-        let defense = this.stats.defense;
+        const dexMod = this.getModifier('Dexterity');
+        let defense: number;
 
-        // Add armor class from armor
-        if (this.equipment.armor?.armorClass) {
-            defense += this.equipment.armor.armorClass;
+        // Check if wearing armor
+        const armor = this.equipment.armor;
+        if (armor?.armorClass) {
+            // Armor provides base AC (replaces 10 + DEX)
+            defense = armor.armorClass;
+            
+            // Add DEX bonus if armor allows it
+            if (armor.dexBonus !== false) {
+                // Some armor caps DEX bonus
+                const maxDexBonus = armor.maxDexBonus ?? 99;
+                defense += Math.min(dexMod, maxDexBonus);
+            }
+        } else {
+            // Unarmored: 10 + DEX modifier
+            defense = 10 + dexMod;
         }
 
-        // Add equipment bonuses
+        // Add defense bonuses from equipment (the +1/+2/+3 bonuses)
         defense += this.getEquipmentBonus('defense');
 
         // Add buff bonuses
@@ -507,67 +693,161 @@ export abstract class Player {
         // Add relic bonuses
         defense += this.getRelicBonus('defense');
 
-        return defense;
+        return Math.max(0, defense);
     }
 
     /**
-     * Gets effective max health including equipment, buff, and relic bonuses.
+     * Gets effective max health derived from Constitution modifier.
+     * Formula: baseHP + (hpPerLevel × level) + (CON mod × level × 0.5) + bonuses
+     * 
+     * Fighter: 20 base + 8 HP/level
+     * Warlock: 15 base + 5 HP/level
      * 
      * @returns Total maximum health
      */
     getMaxHealth(): number {
-        return this.stats.maxHealth
+        const conMod = this.getModifier('Constitution');
+        
+        // Class-specific base HP and per-level bonus
+        // Fighter: 20 base + 8/level (tanky)
+        // Blood Assassin: 18 base + 6/level (medium)
+        // Zephyr: 14 base + 4/level (fragile but evasive)
+        // Warlock: 15 base + 5/level (squishy)
+        let baseHp: number;
+        let hpPerLevel: number;
+        
+        switch (this.playerClass) {
+            case PlayerClass.FIGHTER:
+                baseHp = 20;
+                hpPerLevel = 8;
+                break;
+            case PlayerClass.BLOOD_ASSASSIN:
+                baseHp = 18;
+                hpPerLevel = 6;
+                break;
+            case PlayerClass.ZEPHYR:
+                baseHp = 14;
+                hpPerLevel = 4;
+                break;
+            default: // WARLOCK and others
+                baseHp = 15;
+                hpPerLevel = 5;
+        }
+        
+        // CON contributes at a reduced rate for smoother scaling
+        const conBonus = Math.floor(conMod * this.level * 0.5);
+        
+        return baseHp + (hpPerLevel * this.level) + conBonus
             + this.getEquipmentBonus('maxHealth')
             + this.getBuffBonus('maxHealth')
             + this.getRelicBonus('maxHealth');
     }
 
     /**
-     * Gets effective max mana including equipment, buff, and relic bonuses.
+     * Gets effective max mana derived from Intelligence modifier.
+     * Formula: baseMP + (mpPerLevel × level) + (INT mod × level × 0.5) + bonuses
+     * 
+     * Fighter: 15 base + 2 MP/level
+     * Warlock: 25 base + 6 MP/level
      * 
      * @returns Total maximum mana
      */
     getMaxMana(): number {
-        return this.stats.maxMana
+        const intMod = this.getModifier('Intelligence');
+        
+        // Class-specific base MP and per-level bonus
+        // Warlock: 25 base + 6/level (high mana)
+        // Zephyr: 22 base + 5/level (good mana for wind spells)
+        // Blood Assassin: 20 base + 4/level (medium mana)
+        // Fighter: 15 base + 2/level (low mana)
+        let baseMp: number;
+        let mpPerLevel: number;
+        
+        switch (this.playerClass) {
+            case PlayerClass.WARLOCK:
+                baseMp = 25;
+                mpPerLevel = 6;
+                break;
+            case PlayerClass.ZEPHYR:
+                baseMp = 22;
+                mpPerLevel = 5;
+                break;
+            case PlayerClass.BLOOD_ASSASSIN:
+                baseMp = 20;
+                mpPerLevel = 4;
+                break;
+            default: // FIGHTER and others
+                baseMp = 15;
+                mpPerLevel = 2;
+        }
+        
+        // INT contributes at a reduced rate for smoother scaling
+        const intBonus = Math.floor(intMod * this.level * 0.5);
+        
+        return baseMp + (mpPerLevel * this.level) + intBonus
             + this.getEquipmentBonus('maxMana')
             + this.getBuffBonus('maxMana')
             + this.getRelicBonus('maxMana');
     }
 
     /**
-     * Gets effective speed including equipment, buff, and relic bonuses.
+     * Gets effective speed/initiative derived from Dexterity modifier.
+     * Formula: 10 + DEX mod + bonuses
      * 
      * @returns Total speed value
      */
     getSpeed(): number {
-        return this.stats.speed
+        const dexMod = this.getModifier('Dexterity');
+        const base = 10 + dexMod;
+        
+        return base
             + this.getEquipmentBonus('speed')
             + this.getBuffBonus('speed')
             + this.getRelicBonus('speed');
     }
 
     /**
-     * Gets effective crit chance including equipment, buff, and relic bonuses.
+     * Gets effective crit chance derived from Luck modifier.
+     * Formula: 5% base + (LCK mod × 2%) + bonuses
      * 
      * @returns Total crit chance (0-100+)
      */
     getCritChance(): number {
-        return this.stats.critChance
+        const lckMod = this.getModifier('Luck');
+        const base = 5 + (lckMod * 2); // 5% base, +2% per luck mod
+        
+        return Math.max(0, base
             + this.getEquipmentBonus('critChance')
             + this.getBuffBonus('critChance')
-            + this.getRelicBonus('critChance');
+            + this.getRelicBonus('critChance'));
     }
 
     /**
-     * Gets effective crit multiplier including equipment, buff, and relic bonuses.
+     * Gets effective crit multiplier derived from Luck modifier.
+     * Formula: 1.5x base + (LCK mod × 0.1) + bonuses
      * 
      * @returns Total crit damage multiplier
      */
     getCritMultiplier(): number {
-        return this.stats.critMultiplier
+        const lckMod = this.getModifier('Luck');
+        const base = 1.5 + (lckMod * 0.1); // 1.5x base, +0.1x per luck mod
+        
+        return base
             + (this.getEquipmentBonus('critMultiplier') ?? 0)
             + (this.getBuffBonus('critMultiplier') ?? 0)
             + (this.getRelicBonus('critMultiplier') ?? 0);
+    }
+
+    /**
+     * Gets spell power for magic abilities (Warlock).
+     * Uses the higher of Intelligence or Charisma modifier.
+     * 
+     * @returns Spell power modifier
+     */
+    getSpellPower(): number {
+        const intMod = this.getModifier('Intelligence');
+        const chaMod = this.getModifier('Charisma');
+        return Math.max(intMod, chaMod);
     }
 
     // =========================================================================
@@ -786,17 +1066,34 @@ export abstract class Player {
 
     /**
      * Applies damage to the player after defense reduction.
-     * Damage is reduced by floor(defense/2), minimum 1 damage.
+     * Used for traps, events, and other non-combat damage sources.
+     * Damage reduction: (defense - 10) / 2, capped at 5.
+     * Defense 10 = 0 reduction, Defense 20+ = 5 reduction (max).
      * 
      * @param amount - Raw damage amount before reduction
      * @returns Actual damage taken after defense
      */
     takeDamage(amount: number): number {
-        if (amount <= 0) amount = 0;
+        if (amount <= 0) return 0;
         const defense = this.getDefense();
-        const damageReduction = Math.floor(defense / 2);
+        // Same formula as combat engine: (defense - 10) / 2, capped at 5
+        const damageReduction = Math.min(5, Math.max(0, Math.floor((defense - 10) / 2)));
         const actualDamage = Math.max(1, amount - damageReduction);
 
+        this.stats.health = Math.max(0, this.stats.health - actualDamage);
+        return actualDamage;
+    }
+
+    /**
+     * Applies damage directly to the player without defense reduction.
+     * Used by combat engine where reduction is already calculated.
+     * 
+     * @param amount - Final damage amount (already reduced)
+     * @returns Actual damage taken
+     */
+    takeDamageRaw(amount: number): number {
+        if (amount <= 0) return 0;
+        const actualDamage = Math.max(1, amount);
         this.stats.health = Math.max(0, this.stats.health - actualDamage);
         return actualDamage;
     }
@@ -902,32 +1199,51 @@ export abstract class Player {
         return { levelsGained, newLevel: this.level };
     }
 
+    /** Maximum ability score value (D&D-style cap) */
+    private static readonly ABILITY_SCORE_CAP = 20;
+
     /**
-     * Levels up the player, applying stat growth.
+     * Levels up the player, applying ability score growth.
+     * All derived stats (HP, MP, attack, defense, etc.) are automatically
+     * recalculated since they're based on ability scores and level.
+     * Ability scores are capped at 20.
      * @private
      */
     private levelUp(): void {
         this.level++;
-        const growth = CLASS_STAT_GROWTH[this.playerClass];
-
-        // Apply stat growth
-        if (growth.maxHealth) {
-            this.stats.maxHealth += growth.maxHealth;
-            this.stats.health += growth.maxHealth;
+        
+        // Apply ability score growth every other level (even levels), capped at 20
+        if (this.level % 2 === 0) {
+            const growth = CLASS_ABILITY_GROWTH[this.playerClass];
+            const scores = this.stats.abilityScores;
+            const cap = Player.ABILITY_SCORE_CAP;
+            
+            if (growth.Strength && scores.Strength < cap) {
+                scores.Strength = Math.min(cap, scores.Strength + growth.Strength);
+            }
+            if (growth.Dexterity && scores.Dexterity < cap) {
+                scores.Dexterity = Math.min(cap, scores.Dexterity + growth.Dexterity);
         }
-        if (growth.attack) this.stats.attack += growth.attack;
-        if (growth.defense) this.stats.defense += growth.defense;
-        if (growth.mana) {
-            this.stats.maxMana += growth.mana;
-            this.stats.mana += growth.mana;
+            if (growth.Constitution && scores.Constitution < cap) {
+                scores.Constitution = Math.min(cap, scores.Constitution + growth.Constitution);
+            }
+            if (growth.Intelligence && scores.Intelligence < cap) {
+                scores.Intelligence = Math.min(cap, scores.Intelligence + growth.Intelligence);
+            }
+            if (growth.Wisdom && scores.Wisdom < cap) {
+                scores.Wisdom = Math.min(cap, scores.Wisdom + growth.Wisdom);
         }
-        if (growth.maxMana) this.stats.maxMana += growth.maxMana;
-        if (growth.speed) this.stats.speed += growth.speed;
-        if (growth.critChance) this.stats.critChance += growth.critChance;
+            if (growth.Charisma && scores.Charisma < cap) {
+                scores.Charisma = Math.min(cap, scores.Charisma + growth.Charisma);
+            }
+            if (growth.Luck && scores.Luck < cap) {
+                scores.Luck = Math.min(cap, scores.Luck + growth.Luck);
+            }
+        }
 
-        // Full heal on level up
-        this.stats.health = this.stats.maxHealth;
-        this.stats.mana = this.stats.maxMana;
+        // Full heal on level up (derived stats auto-update via getters)
+        this.stats.health = this.getMaxHealth();
+        this.stats.mana = this.getMaxMana();
     }
 
     /**
@@ -1123,25 +1439,35 @@ export abstract class Player {
 
     /**
      * Performs a basic attack.
-     * Uses seeded RNG for crit determination.
+     * Rolls weapon dice + attack bonus, with crit chance.
+     * Uses seeded RNG for dice rolls and crit determination.
      * 
      * @returns Object with damage, crit status, and on-hit effects
      */
     basicAttack(): { damage: number; isCrit: boolean; onHitEffects: OnHitResult[] } {
-        const attackPower = this.getAttackPower();
+        const attackBonus = this.getAttackBonus();
         const critChance = this.getCritChance();
         const critMultiplier = this.getCritMultiplier();
 
+        // Roll weapon dice or 1d4 for unarmed
+        const weaponDice = this.equipment.weapon?.damage?.dice ?? '1d4';
+        const weaponDamage = rollDice(weaponDice);
+        
+        // Base damage = weapon roll + attack bonus
+        let damage = weaponDamage + attackBonus;
+
+        // Check for crit
         const isCrit = isRNGInitialized()
             ? getRNG().percentChance(critChance)
             : Math.random() * 100 < critChance;
-        const damage = isCrit
-            ? Math.floor(attackPower * critMultiplier)
-            : attackPower;
+        
+        if (isCrit) {
+            damage = Math.floor(damage * critMultiplier);
+        }
 
         const onHitEffects = this.processOnHitEffects();
 
-        return { damage, isCrit, onHitEffects };
+        return { damage: Math.max(1, damage), isCrit, onHitEffects };
     }
 
     /**
@@ -1181,14 +1507,14 @@ export abstract class Player {
                 ability.currentCooldown--;
             }
         }
-        
+
         // Tick item-granted abilities from equipment
         const equippedItems: (Item | null)[] = [
             this.equipment.weapon,
             this.equipment.armor,
             this.equipment.accessory
         ];
-        
+
         for (const item of equippedItems) {
             if (item?.grantedAbility && item.grantedAbility.currentCooldown > 0) {
                 item.grantedAbility.currentCooldown--;

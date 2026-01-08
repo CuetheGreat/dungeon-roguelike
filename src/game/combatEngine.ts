@@ -133,8 +133,16 @@ export interface AttackRollResult {
 
 /** Result of a damage calculation */
 export interface DamageResult {
-    /** Base damage before reduction */
+    /** The weapon dice notation (e.g., "1d8") */
+    weaponDiceNotation: string;
+    /** The result of rolling the weapon damage dice */
+    weaponDamageRoll: number;
+    /** The attack bonus added to damage */
+    attackBonus: number;
+    /** Base damage before crit and reduction (weaponDamageRoll + attackBonus) */
     baseDamage: number;
+    /** Damage after crit multiplier (if any) */
+    damageAfterCrit: number;
     /** Damage reduction from defense */
     damageReduction: number;
     /** Final damage after reduction (minimum 1) */
@@ -249,6 +257,14 @@ export class CombatEngine {
         this.player = player;
         this.enemies = [...enemies]; // Clone to avoid mutation
         this.state = this.initializeCombat();
+    }
+
+    /**
+     * Gets the player instance.
+     * Used for awarding XP after combat.
+     */
+    public getPlayer(): Player {
+        return this.player;
     }
 
     // =========================================================================
@@ -388,6 +404,38 @@ export class CombatEngine {
     }
 
     /**
+     * Calculate spell attack bonus for the player.
+     * Uses the player's getSpellAttackBonus() method.
+     */
+    private getPlayerSpellAttackBonus(): number {
+        return this.player.getSpellAttackBonus();
+    }
+
+    /**
+     * Perform a spell attack roll against a target.
+     * Uses spell attack bonus (INT-based) instead of physical attack bonus.
+     * 
+     * @param targetDefense - The defender's defense value (AC)
+     * @returns AttackRollResult with hit/miss determination
+     */
+    rollSpellAttack(targetDefense: number): AttackRollResult {
+        const spellAttackBonus = this.getPlayerSpellAttackBonus();
+        return this.rollAttack(spellAttackBonus, targetDefense);
+    }
+
+    /**
+     * Perform a physical ability attack roll against a target.
+     * Uses physical attack bonus (STR-based).
+     * 
+     * @param targetDefense - The defender's defense value (AC)
+     * @returns AttackRollResult with hit/miss determination
+     */
+    rollPhysicalAbilityAttack(targetDefense: number): AttackRollResult {
+        const attackBonus = this.getPlayerAttackBonus();
+        return this.rollAttack(attackBonus, targetDefense);
+    }
+
+    /**
      * Perform an attack roll against a target.
      * 
      * @param attackBonus - The attacker's total attack bonus
@@ -420,6 +468,64 @@ export class CombatEngine {
         };
     }
 
+    /**
+     * Get the ability modifier for an enemy based on save type.
+     * Uses enemy's ability scores if available, otherwise derives from CR.
+     * 
+     * @param enemy - The enemy making the save
+     * @param saveType - Which ability score to use
+     * @returns The ability modifier
+     */
+    private getEnemySaveModifier(enemy: Enemy, saveType: string): number {
+        // If enemy has ability scores from API, use them
+        if (enemy.abilityScores) {
+            const scoreMap: Record<string, number> = {
+                'strength': enemy.abilityScores.strength,
+                'dexterity': enemy.abilityScores.dexterity,
+                'constitution': enemy.abilityScores.constitution,
+                'intelligence': enemy.abilityScores.intelligence,
+                'wisdom': enemy.abilityScores.wisdom,
+                'charisma': enemy.abilityScores.charisma
+            };
+            const score = scoreMap[saveType] ?? 10;
+            return Math.floor((score - 10) / 2);
+        }
+        
+        // Fallback: derive modifier from CR (rough approximation)
+        // Low CR monsters have ~10 in most stats, higher CR have better stats
+        const baseMod = Math.floor(enemy.challengeRating / 4);
+        return baseMod;
+    }
+
+    /**
+     * Roll a saving throw for an enemy against a player's effect.
+     * 
+     * @param enemy - The enemy making the save
+     * @param saveType - Which ability score to use (strength, dexterity, etc.)
+     * @param dc - The difficulty class to beat
+     * @returns Object with roll details and success/failure
+     */
+    rollEnemySavingThrow(enemy: Enemy, saveType: string, dc: number): { roll: number; modifier: number; total: number; dc: number; success: boolean } {
+        const roll = this.rollD20();
+        const modifier = this.getEnemySaveModifier(enemy, saveType);
+        
+        // Add proficiency bonus if enemy has it (from API)
+        const profBonus = enemy.proficiencyBonus ?? 0;
+        const total = roll + modifier + profBonus;
+        
+        // Natural 20 always succeeds, natural 1 always fails
+        let success: boolean;
+        if (roll === 20) {
+            success = true;
+        } else if (roll === 1) {
+            success = false;
+        } else {
+            success = total >= dc;
+        }
+        
+        return { roll, modifier: modifier + profBonus, total, dc, success };
+    }
+
     // =========================================================================
     // DAMAGE CALCULATION
     // =========================================================================
@@ -436,7 +542,7 @@ export class CombatEngine {
      * @returns DamageResult with final damage calculation
      */
     calculateDamage(
-        attackPower: number,
+        attackBonus: number,
         weaponDice: string | null,
         targetDefense: number,
         critChance: number,
@@ -444,11 +550,11 @@ export class CombatEngine {
         isNatural20: boolean
     ): DamageResult {
         // Roll weapon damage or use base 1d4 for unarmed
-        const weaponDamage = weaponDice ? rollDice(weaponDice) : rollDice('1d4');
+        const weaponDiceNotation = weaponDice ?? '1d4';
+        const weaponDamageRoll = rollDice(weaponDiceNotation);
         
-        // Base damage = weapon dice + floor(attack / 2)
-        const attackBonus = Math.floor(attackPower / 2);
-        let baseDamage = weaponDamage + attackBonus;
+        // Base damage = weapon dice roll + attack bonus (STR mod + class bonus + bonuses)
+        const baseDamage = weaponDamageRoll + attackBonus;
 
         // Check for critical hit
         let isCritical = isNatural20; // Natural 20 is auto-crit
@@ -460,18 +566,23 @@ export class CombatEngine {
         }
 
         // Apply crit multiplier
-        if (isCritical) {
-            baseDamage = Math.floor(baseDamage * critMultiplier);
-        }
+        const damageAfterCrit = isCritical 
+            ? Math.floor(baseDamage * critMultiplier)
+            : baseDamage;
 
-        // Calculate damage reduction from defense
-        const damageReduction = Math.floor(targetDefense / 2);
+        // Calculate damage reduction from defense (capped at 5)
+        // Defense 10 = 0 reduction, Defense 20+ = 5 reduction (max)
+        const damageReduction = Math.min(5, Math.max(0, Math.floor((targetDefense - 10) / 2)));
         
         // Final damage (minimum 1)
-        const finalDamage = Math.max(1, baseDamage - damageReduction);
+        const finalDamage = Math.max(1, damageAfterCrit - damageReduction);
 
         return {
+            weaponDiceNotation,
+            weaponDamageRoll,
+            attackBonus,
             baseDamage,
+            damageAfterCrit,
             damageReduction,
             finalDamage,
             isCritical,
@@ -905,9 +1016,9 @@ export class CombatEngine {
             // Get weapon dice
             const weaponDice = this.player.equipment.weapon?.damage?.dice ?? null;
             
-            // Calculate damage
+            // Calculate damage (use attack bonus, not attack power - weapon dice rolled separately)
             damage = this.calculateDamage(
-                this.player.getAttackPower(),
+                this.player.getAttackBonus(),
                 weaponDice,
                 target.defense,
                 this.player.getCritChance(),
@@ -929,14 +1040,22 @@ export class CombatEngine {
             // Update combatant in turn order
             this.updateCombatantHealth(target.id, target.health);
 
-            // Log the attack
+            // Log the attack with full details (format bonus with proper sign to avoid "+-1")
+            const rollBonus = attackRoll.total - attackRoll.roll;
+            const rollBonusStr = rollBonus >= 0 ? `+${rollBonus}` : `${rollBonus}`;
+            const atkBonusStr = damage.attackBonus >= 0 ? `+${damage.attackBonus}` : `${damage.attackBonus}`;
+            
+            const rollDetails = `[${attackRoll.roll}${rollBonusStr}=${attackRoll.total} vs AC ${attackRoll.targetDefense}]`;
+            const damageDetails = `${damage.weaponDiceNotation}(${damage.weaponDamageRoll})${atkBonusStr}=${damage.baseDamage}`;
+            const reductionDetails = damage.damageReduction > 0 ? ` -${damage.damageReduction} armor` : '';
+            
             if (damage.isCritical) {
                 this.state.log.push(
-                    `${attacker.name} CRITICALLY hits ${defender.name} for ${damage.finalDamage} damage!`
+                    `${attacker.name} ${rollDetails} CRIT! ${damageDetails}×${damage.critMultiplier}=${damage.damageAfterCrit}${reductionDetails} → ${damage.finalDamage} damage to ${defender.name}!`
                 );
             } else {
                 this.state.log.push(
-                    `${attacker.name} hits ${defender.name} for ${damage.finalDamage} damage.`
+                    `${attacker.name} ${rollDetails} HIT! ${damageDetails}${reductionDetails} → ${damage.finalDamage} damage to ${defender.name}.`
                 );
             }
 
@@ -945,11 +1064,14 @@ export class CombatEngine {
                 this.removeDeadEnemy(target.id);
             }
         } else {
-            // Log miss
+            // Log miss with roll details (format bonus with proper sign)
+            const rollBonus = attackRoll.total - attackRoll.roll;
+            const rollBonusStr = rollBonus >= 0 ? `+${rollBonus}` : `${rollBonus}`;
+            const rollDetails = `[${attackRoll.roll}${rollBonusStr}=${attackRoll.total} vs AC ${attackRoll.targetDefense}]`;
             if (attackRoll.isNatural1) {
-                this.state.log.push(`${attacker.name} critically misses ${defender.name}!`);
+                this.state.log.push(`${attacker.name} ${rollDetails} CRITICAL MISS!`);
             } else {
-                this.state.log.push(`${attacker.name} misses ${defender.name}.`);
+                this.state.log.push(`${attacker.name} ${rollDetails} MISS.`);
             }
         }
 
@@ -1126,11 +1248,11 @@ export class CombatEngine {
             const value = ability.selfBuff.value ?? 25;
             
             if (buffType === 'strengthen') {
-                const attackBonus = Math.floor(this.player.stats.attack * (value / 100));
+                const attackBonus = Math.floor(this.player.getAttackPower() * (value / 100));
                 this.player.applyBuff(ability.name, { attack: attackBonus }, duration);
                 message = `${this.player.name} uses ${ability.name}, increasing attack by ${attackBonus} for ${duration} turns!`;
             } else if (buffType === 'fortify') {
-                const defenseBonus = Math.floor(this.player.stats.defense * (value / 100));
+                const defenseBonus = Math.floor(this.player.getDefense() * (value / 100));
                 this.player.applyBuff(ability.name, { defense: defenseBonus }, duration);
                 message = `${this.player.name} uses ${ability.name}, increasing defense by ${defenseBonus} for ${duration} turns!`;
             } else if (buffType === 'regeneration') {
@@ -1168,7 +1290,7 @@ export class CombatEngine {
             };
         }
 
-        // === STEP 7: Handle status effects on enemies (no damage) ===
+        // === STEP 7: Handle status effects on enemies (no damage) - with saving throws ===
         if (ability.statusEffect && !ability.damage && targetType === 'enemy') {
             const target = this.enemies.find(e => e.id === targetId);
             if (!target) {
@@ -1180,6 +1302,36 @@ export class CombatEngine {
                 };
             }
 
+            // Determine if target gets a saving throw
+            const saveType = ability.saveType;
+            const abilityType = ability.abilityType ?? 'spell';
+            
+            if (saveType && abilityType === 'status_debuff') {
+                // Calculate save DC based on caster type
+                const saveDC = this.player.getSpellSaveDC();
+                
+                // Target rolls saving throw
+                const saveResult = this.rollEnemySavingThrow(target, saveType, saveDC);
+                const saveDetails = `[${saveResult.roll}+${saveResult.modifier}=${saveResult.total} vs DC ${saveResult.dc}]`;
+                
+                if (saveResult.success) {
+                    // Target resisted the effect
+                    message = `${this.player.name} uses ${ability.name} on ${target.name}, but ${target.name} resists! ${saveDetails}`;
+                    this.state.log.push(message);
+                    return {
+                        abilityName: ability.name,
+                        success: true, // Ability was used, target just saved
+                        effectApplied: undefined,
+                        enemiesKilled: [],
+                        message
+                    };
+                }
+                
+                // Target failed the save - apply the effect
+                this.state.log.push(`${target.name} fails ${saveType.toUpperCase()} save! ${saveDetails}`);
+            }
+
+            // Apply the status effect
             const effectType = this.mapStatusEffectType(ability.statusEffect.type);
             if (effectType) {
                 this.applyStatusEffect(
@@ -1192,7 +1344,7 @@ export class CombatEngine {
                 );
             }
             
-            message = `${this.player.name} uses ${ability.name} on ${target.name}!`;
+            message = `${this.player.name} uses ${ability.name} on ${target.name}! ${target.name} is ${ability.statusEffect.type}ed!`;
             this.state.log.push(message);
             return {
                 abilityName: ability.name,
@@ -1205,50 +1357,100 @@ export class CombatEngine {
 
         // === STEP 8: Calculate damage ===
         let baseDamage = 0;
-        if (ability.damage) {
-            if (ability.damageCalc === 'multiplier') {
-                // Multiplier-based (Fighter style): damage value is a multiplier of basic attack
-                const attackDamage = this.player.basicAttack().damage;
-                baseDamage = Math.floor(attackDamage * ability.damage);
-            } else {
-                // Flat damage (Warlock style): base damage + level scaling
-                const levelScale = ability.levelScaling ?? 1.0;
-                baseDamage = ability.damage + Math.floor(this.player.level * levelScale);
+        let damageRollDetails = ''; // For logging dice rolls
+        
+        // Priority 1: Spell damage dice (D&D cantrip-style scaling)
+        if (ability.spellDamageDice) {
+            // Calculate number of dice based on level: +1 die every 4 levels
+            // Level 1-4: 1 die, Level 5-8: 2 dice, Level 9-12: 3 dice, etc.
+            const extraDice = Math.floor(this.player.level / 4);
+            const totalDice = 1 + extraDice;
+            
+            // Parse the dice notation (e.g., "1d10" -> "d10")
+            const diceType = ability.spellDamageDice.replace(/^\d+/, ''); // Remove leading number
+            const scaledDice = `${totalDice}${diceType}`;
+            
+            baseDamage = rollDice(scaledDice);
+            damageRollDetails = `(${scaledDice}=${baseDamage})`;
+            
+            // Add spellcasting modifier (INT mod)
+            const spellMod = this.player.getModifier('Intelligence');
+            baseDamage += spellMod;
+            if (spellMod !== 0) {
+                damageRollDetails = `(${scaledDice}+${spellMod}=${baseDamage})`;
             }
+        }
+        // Priority 2: Multiplier-based (Fighter physical abilities)
+        else if (ability.damage && ability.damageCalc === 'multiplier') {
+            const attackDamage = this.player.basicAttack().damage;
+            baseDamage = Math.floor(attackDamage * ability.damage);
+        }
+        // Priority 3: Flat damage with level scaling (legacy/fallback)
+        else if (ability.damage) {
+            const levelScale = ability.levelScaling ?? 1.0;
+            baseDamage = ability.damage + Math.floor(this.player.level * levelScale);
+        }
 
-            // Handle soul shard bonus damage
-            if (ability.consumesShards) {
-                const warlock = this.player as { soulShards?: number };
-                if (warlock.soulShards && warlock.soulShards > 0) {
-                    const shardBonus = warlock.soulShards * (ability.damagePerShard ?? 0);
-                    
-                    // For Soul Harvest, damage IS per shard (not bonus)
-                    if (ability.effect === 'soul_harvest') {
-                        baseDamage = baseDamage * warlock.soulShards;
-                        this.state.log.push(`${ability.name} consumes ${warlock.soulShards} soul shards!`);
-                    } else if (shardBonus > 0) {
-                        baseDamage += shardBonus;
-                        this.state.log.push(`Soul shards add ${shardBonus} bonus damage!`);
-                    }
-                    warlock.soulShards = 0;
+        // Handle soul shard bonus damage
+        if (ability.consumesShards) {
+            const warlock = this.player as { soulShards?: number };
+            if (warlock.soulShards && warlock.soulShards > 0) {
+                const shardBonus = warlock.soulShards * (ability.damagePerShard ?? 0);
+                
+                // For Soul Harvest, damage IS per shard (not bonus)
+                if (ability.effect === 'soul_harvest') {
+                    baseDamage = baseDamage * warlock.soulShards;
+                    this.state.log.push(`${ability.name} consumes ${warlock.soulShards} soul shards!`);
+                } else if (shardBonus > 0) {
+                    baseDamage += shardBonus;
+                    this.state.log.push(`Soul shards add ${shardBonus} bonus damage!`);
                 }
+                warlock.soulShards = 0;
             }
         }
 
-        // === STEP 9: Apply damage to targets ===
+        // === STEP 9: Apply damage to targets (with hit rolls) ===
         if (baseDamage > 0) {
+            const abilityType = ability.abilityType ?? 'spell'; // Default to spell for backwards compatibility
+            
             if (targetType === 'all_enemies') {
-                // AOE damage
+                // AOE damage - roll once, apply to all
                 const aliveEnemies = this.enemies.filter(e => e.health > 0);
+                
                 for (const enemy of aliveEnemies) {
+                    // Roll to hit based on ability type
+                    const attackRoll = abilityType === 'physical' 
+                        ? this.rollPhysicalAbilityAttack(enemy.defense)
+                        : this.rollSpellAttack(enemy.defense);
+                    
+                    const rollBonus = attackRoll.total - attackRoll.roll;
+                    const rollDetails = `[${attackRoll.roll}+${rollBonus}=${attackRoll.total} vs AC ${attackRoll.targetDefense}]`;
+                    
+                    if (!attackRoll.isHit) {
+                        // Miss
+                        if (attackRoll.isNatural1) {
+                            this.state.log.push(`${ability.name} ${rollDetails} <span class="log-miss">fumbles against ${enemy.name}!</span>`);
+                        } else {
+                            this.state.log.push(`${ability.name} ${rollDetails} <span class="log-miss">misses ${enemy.name}!</span>`);
+                        }
+                        continue;
+                    }
+                    
+                    // Hit - apply damage
                     const damageModifier = this.getDamageReceivedModifier(enemy.id);
-                    const finalDamage = Math.max(1, Math.floor(baseDamage * damageModifier));
+                    let finalDamage = Math.max(1, Math.floor(baseDamage * damageModifier));
+                    
+                    // Crit on natural 20
+                    if (attackRoll.isNatural20) {
+                        finalDamage = Math.floor(finalDamage * this.player.getCritMultiplier());
+                        this.state.log.push(`${ability.name} ${rollDetails} <span class="log-crit">CRITS ${enemy.name}</span> for ${finalDamage} damage!`);
+                    } else {
+                        this.state.log.push(`${ability.name} ${rollDetails} hits ${enemy.name} for ${finalDamage} damage!`);
+                    }
                     
                     enemy.health = Math.max(0, enemy.health - finalDamage);
                     this.updateCombatantHealth(enemy.id, enemy.health);
                     totalDamage += finalDamage;
-                    
-                    this.state.log.push(`${ability.name} hits ${enemy.name} for ${finalDamage} damage!`);
                     
                     if (enemy.health <= 0) {
                         enemiesKilled.push(enemy.id);
@@ -1261,7 +1463,7 @@ export class CombatEngine {
                     this.removeDeadEnemy(id);
                 }
                 
-                message = `${this.player.name} uses ${ability.name}, dealing ${totalDamage} total damage to all enemies!`;
+                message = `${this.player.name} uses ${ability.name}, dealing ${totalDamage} total damage!`;
             } else {
                 // Single target damage
                 const target = this.enemies.find(e => e.id === targetId);
@@ -1274,27 +1476,85 @@ export class CombatEngine {
                     };
                 }
 
+                // Roll to hit based on ability type
+                const attackRoll = abilityType === 'physical' 
+                    ? this.rollPhysicalAbilityAttack(target.defense)
+                    : this.rollSpellAttack(target.defense);
+                
+                const rollBonus = attackRoll.total - attackRoll.roll;
+                const rollDetails = `[${attackRoll.roll}+${rollBonus}=${attackRoll.total} vs AC ${attackRoll.targetDefense}]`;
+                
+                if (!attackRoll.isHit) {
+                    // Miss - still consume mana/cooldown but no damage
+                    if (attackRoll.isNatural1) {
+                        message = `${this.player.name} uses ${ability.name} but fumbles! (rolled 1)`;
+                    } else {
+                        message = `${this.player.name} uses ${ability.name} on ${target.name} but misses! (${rollDetails})`;
+                    }
+                    this.state.log.push(message);
+                    
+                    return {
+                        abilityName: ability.name,
+                        success: true, // Ability was used, just missed
+                        damage: 0,
+                        enemiesKilled: [],
+                        message
+                    };
+                }
+
+                // Hit - calculate and apply damage
                 const damageModifier = this.getDamageReceivedModifier(target.id);
                 totalDamage = Math.max(1, Math.floor(baseDamage * damageModifier));
+                
+                // Crit on natural 20
+                const isCrit = attackRoll.isNatural20;
+                if (isCrit) {
+                    totalDamage = Math.floor(totalDamage * this.player.getCritMultiplier());
+                }
                 
                 target.health = Math.max(0, target.health - totalDamage);
                 this.updateCombatantHealth(target.id, target.health);
                 
-                this.state.log.push(`${ability.name} hits ${target.name} for ${totalDamage} damage!`);
+                if (isCrit) {
+                    this.state.log.push(`${ability.name} ${rollDetails} <span class="log-crit">CRITS ${target.name}</span> for ${totalDamage} damage!`);
+                } else {
+                    this.state.log.push(`${ability.name} ${rollDetails} hits ${target.name} for ${totalDamage} damage!`);
+                }
 
-                // Apply status effect to target if ability has one
-                if (ability.statusEffect) {
+                // Apply status effect to target if ability has one (with saving throw if applicable)
+                if (ability.statusEffect && target.health > 0) {
                     const effectType = this.mapStatusEffectType(ability.statusEffect.type);
                     if (effectType) {
-                        this.applyStatusEffect(
-                            target.id,
-                            effectType,
-                            ability.statusEffect.duration,
-                            ability.name,
-                            this.player.level,
-                            ability.statusEffect.value
-                        );
-                        this.state.log.push(`${target.name} is affected by ${ability.statusEffect.type}!`);
+                        let effectApplied = true;
+                        
+                        // Check if target gets a saving throw
+                        if (ability.saveType) {
+                            const saveDC = abilityType === 'physical' 
+                                ? this.player.getPhysicalSaveDC()
+                                : this.player.getSpellSaveDC();
+                            
+                            const saveResult = this.rollEnemySavingThrow(target, ability.saveType, saveDC);
+                            const saveDetails = `[${saveResult.roll}+${saveResult.modifier}=${saveResult.total} vs DC ${saveResult.dc}]`;
+                            
+                            if (saveResult.success) {
+                                this.state.log.push(`${target.name} resists ${ability.statusEffect.type}! ${saveDetails}`);
+                                effectApplied = false;
+                            } else {
+                                this.state.log.push(`${target.name} fails ${ability.saveType.toUpperCase()} save! ${saveDetails}`);
+                            }
+                        }
+                        
+                        if (effectApplied) {
+                            this.applyStatusEffect(
+                                target.id,
+                                effectType,
+                                ability.statusEffect.duration,
+                                ability.name,
+                                this.player.level,
+                                ability.statusEffect.value
+                            );
+                            this.state.log.push(`${target.name} is ${ability.statusEffect.type}ned!`);
+                        }
                     }
                 }
 
@@ -1401,21 +1661,29 @@ export class CombatEngine {
             // Break sleep on damage
             this.breakSleepOnDamage(this.player.id);
 
-            // Apply damage to player
-            this.player.takeDamage(damage.finalDamage);
+            // Apply damage to player (use raw - reduction already calculated)
+            this.player.takeDamageRaw(damage.finalDamage);
             defenderDied = !this.player.isAlive();
 
             // Update combatant in turn order
             this.updateCombatantHealth(this.player.id, this.player.stats.health);
 
-            // Log the attack
+            // Log the attack with full details (format bonus with proper sign to avoid "+-1")
+            const rollBonus = attackRoll.total - attackRoll.roll;
+            const rollBonusStr = rollBonus >= 0 ? `+${rollBonus}` : `${rollBonus}`;
+            const atkBonusStr = damage.attackBonus >= 0 ? `+${damage.attackBonus}` : `${damage.attackBonus}`;
+            
+            const rollDetails = `[${attackRoll.roll}${rollBonusStr}=${attackRoll.total} vs AC ${attackRoll.targetDefense}]`;
+            const damageDetails = `${damage.weaponDiceNotation}(${damage.weaponDamageRoll})${atkBonusStr}=${damage.baseDamage}`;
+            const reductionDetails = damage.damageReduction > 0 ? ` -${damage.damageReduction} armor` : '';
+            
             if (damage.isCritical) {
                 this.state.log.push(
-                    `${attacker.name} CRITICALLY hits ${defender.name} for ${damage.finalDamage} damage!`
+                    `${attacker.name} ${rollDetails} CRIT! ${damageDetails}×${damage.critMultiplier}=${damage.damageAfterCrit}${reductionDetails} → ${damage.finalDamage} damage to ${defender.name}!`
                 );
             } else {
                 this.state.log.push(
-                    `${attacker.name} hits ${defender.name} for ${damage.finalDamage} damage.`
+                    `${attacker.name} ${rollDetails} HIT! ${damageDetails}${reductionDetails} → ${damage.finalDamage} damage to ${defender.name}.`
                 );
             }
 
@@ -1423,11 +1691,14 @@ export class CombatEngine {
                 this.state.log.push(`${defender.name} has fallen!`);
             }
         } else {
-            // Log miss
+            // Log miss with roll details (format bonus with proper sign)
+            const rollBonus = attackRoll.total - attackRoll.roll;
+            const rollBonusStr = rollBonus >= 0 ? `+${rollBonus}` : `${rollBonus}`;
+            const rollDetails = `[${attackRoll.roll}${rollBonusStr}=${attackRoll.total} vs AC ${attackRoll.targetDefense}]`;
             if (attackRoll.isNatural1) {
-                this.state.log.push(`${attacker.name} critically misses ${defender.name}!`);
+                this.state.log.push(`${attacker.name} ${rollDetails} CRITICAL MISS!`);
             } else {
-                this.state.log.push(`${attacker.name} misses ${defender.name}.`);
+                this.state.log.push(`${attacker.name} ${rollDetails} MISS.`);
             }
         }
 

@@ -1,0 +1,252 @@
+/* 
+ * Dungeon Roguelike - React Edition
+ * Base styles for Phase 1 setup verification
+ */
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+  color: #e8e8e8;
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Start Screen */
+.start-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 2rem;
+  text-align: center;
+}
+
+.start-screen h1 {
+  font-size: 3rem;
+  margin-bottom: 0.5rem;
+  color: #ffd700;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+.start-screen > p {
+  color: #888;
+  margin-bottom: 2rem;
+}
+
+.class-selection {
+  margin-bottom: 2rem;
+}
+
+.class-selection h2 {
+  margin-bottom: 1rem;
+  color: #aaa;
+}
+
+.class-buttons {
+  display: flex;
+  gap: 1rem;
+}
+
+.class-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 1.5rem 2rem;
+  background: rgba(255, 255, 255, 0.1);
+  border: 2px solid transparent;
+  border-radius: 12px;
+  color: #fff;
+  font-size: 1.2rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.class-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 215, 0, 0.3);
+}
+
+.class-btn.selected {
+  background: rgba(255, 215, 0, 0.2);
+  border-color: #ffd700;
+}
+
+.class-btn small {
+  font-size: 0.8rem;
+  color: #888;
+  margin-top: 0.5rem;
+}
+
+.name-input,
+.seed-input {
+  margin-bottom: 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.name-input label,
+.seed-input label {
+  margin-bottom: 0.5rem;
+  color: #888;
+}
+
+.name-input input,
+.seed-input input {
+  padding: 0.75rem 1rem;
+  font-size: 1rem;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  color: #fff;
+  width: 250px;
+  text-align: center;
+}
+
+.name-input input:focus,
+.seed-input input:focus {
+  outline: none;
+  border-color: #ffd700;
+}
+
+.start-btn {
+  padding: 1rem 3rem;
+  font-size: 1.2rem;
+  background: linear-gradient(135deg, #ffd700, #ffaa00);
+  border: none;
+  border-radius: 8px;
+  color: #1a1a2e;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-top: 1rem;
+}
+
+.start-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(255, 215, 0, 0.4);
+}
+
+.start-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Game Container */
+.game-container {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  padding: 1rem;
+}
+
+.game-header {
+  text-align: center;
+  padding: 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  margin-bottom: 1rem;
+}
+
+.game-header h1 {
+  color: #ffd700;
+  font-size: 1.5rem;
+}
+
+.game-header p {
+  color: #888;
+  font-size: 0.9rem;
+}
+
+.game-main {
+  flex: 1;
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.player-info,
+.room-info,
+.actions {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.player-info h2 {
+  color: #ffd700;
+  margin-bottom: 0.5rem;
+}
+
+.room-info h3,
+.actions h3 {
+  color: #aaa;
+  margin-bottom: 0.5rem;
+}
+
+.actions ul {
+  list-style: none;
+  color: #888;
+}
+
+.actions li {
+  padding: 0.25rem 0;
+}
+
+.game-footer {
+  text-align: center;
+  padding: 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  color: #4ade80;
+}
+
+.game-footer p:first-child {
+  font-size: 1.2rem;
+  margin-bottom: 0.25rem;
+}
+
+.game-footer p:last-child {
+  color: #888;
+  font-size: 0.9rem;
+}
+
+/* Loading */
+.loading-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+}
+
+.loading-spinner {
+  width: 50px;
+  height: 50px;
+  border: 3px solid rgba(255, 215, 0, 0.2);
+  border-top-color: #ffd700;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Error */
+.error,
+.error-message {
+  color: #f87171;
+  margin-top: 1rem;
+}
+

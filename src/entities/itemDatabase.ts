@@ -285,7 +285,7 @@ export const WEAPONS: Item[] = [
  * @const
  */
 export const ARMOR: Item[] = [
-    // === Common Armor ===
+    // === Common Armor (+1 defense, no special effects) ===
     createItem({
         id: 'leather-armor',
         name: 'Leather Armor',
@@ -293,9 +293,10 @@ export const ARMOR: Item[] = [
         rarity: ItemRarity.COMMON,
         value: 10,
         weight: 10,
-        description: 'Light armor made of leather.',
+        description: 'Light armor made of leather. +1 Defense.',
         armorClass: 11,
-        dexBonus: true
+        dexBonus: true,
+        bonuses: { defense: 1 }
     }),
     createItem({
         id: 'chain-shirt',
@@ -304,10 +305,11 @@ export const ARMOR: Item[] = [
         rarity: ItemRarity.COMMON,
         value: 50,
         weight: 20,
-        description: 'A shirt of interlocking metal rings.',
+        description: 'A shirt of interlocking metal rings. +1 Defense.',
         armorClass: 13,
         dexBonus: true,
-        maxDexBonus: 2
+        maxDexBonus: 2,
+        bonuses: { defense: 1 }
     }),
     createItem({
         id: 'chain-mail',
@@ -316,11 +318,12 @@ export const ARMOR: Item[] = [
         rarity: ItemRarity.COMMON,
         value: 75,
         weight: 55,
-        description: 'Heavy armor of interlocking metal rings.',
-        armorClass: 16,
+        description: 'Heavy armor of interlocking metal rings. +1 Defense.',
+        armorClass: 14,
         dexBonus: false,
         strengthRequirement: 13,
-        stealthDisadvantage: true
+        stealthDisadvantage: true,
+        bonuses: { defense: 1 }
     }),
     createItem({
         id: 'robes',
@@ -329,13 +332,13 @@ export const ARMOR: Item[] = [
         rarity: ItemRarity.COMMON,
         value: 5,
         weight: 3,
-        description: 'Simple cloth robes, offering little protection.',
+        description: 'Simple cloth robes. +1 Defense, minor mana boost.',
         armorClass: 10,
         dexBonus: true,
-        bonuses: { maxMana: 15 }
+        bonuses: { defense: 1, maxMana: 10 }
     }),
 
-    // === Uncommon Armor ===
+    // === Uncommon Armor (+2 defense, minor bonus effect) ===
     createItem({
         id: 'scale-mail-plus',
         name: 'Scale Mail +1',
@@ -343,11 +346,11 @@ export const ARMOR: Item[] = [
         rarity: ItemRarity.UNCOMMON,
         value: 200,
         weight: 45,
-        description: 'Enchanted scale armor providing extra protection.',
-        armorClass: 15,
+        description: 'Enchanted scale armor. +2 Defense.',
+        armorClass: 14,
         dexBonus: true,
         maxDexBonus: 2,
-        bonuses: { defense: 1 }
+        bonuses: { defense: 2 }
     }),
     createItem({
         id: 'mithral-chain',
@@ -356,10 +359,10 @@ export const ARMOR: Item[] = [
         rarity: ItemRarity.UNCOMMON,
         value: 300,
         weight: 10,
-        description: 'Lightweight chain made of mithral.',
+        description: 'Lightweight chain made of mithral. +2 Defense, increased speed.',
         armorClass: 13,
         dexBonus: true,
-        bonuses: { speed: 5 }
+        bonuses: { defense: 2, speed: 3 }
     }),
     createItem({
         id: 'arcane-robes',
@@ -368,13 +371,25 @@ export const ARMOR: Item[] = [
         rarity: ItemRarity.UNCOMMON,
         value: 250,
         weight: 3,
-        description: 'Robes woven with arcane threads.',
+        description: 'Robes woven with arcane threads. +2 Defense, mana boost.',
         armorClass: 11,
         dexBonus: true,
-        bonuses: { maxMana: 30, critChance: 2 }
+        bonuses: { defense: 2, maxMana: 20 }
+    }),
+    createItem({
+        id: 'studded-leather',
+        name: 'Studded Leather',
+        type: ItemType.ARMOR,
+        rarity: ItemRarity.UNCOMMON,
+        value: 150,
+        weight: 13,
+        description: 'Leather reinforced with metal studs. +2 Defense.',
+        armorClass: 12,
+        dexBonus: true,
+        bonuses: { defense: 2 }
     }),
 
-    // === Rare Armor ===
+    // === Rare Armor (+3 defense, significant bonus effect) ===
     createItem({
         id: 'plate-of-fortitude',
         name: 'Plate of Fortitude',
@@ -382,12 +397,12 @@ export const ARMOR: Item[] = [
         rarity: ItemRarity.RARE,
         value: 1500,
         weight: 65,
-        description: 'Heavy plate armor that bolsters the wearer\'s vitality.',
-        armorClass: 18,
+        description: 'Heavy plate armor that bolsters vitality. +3 Defense, +20 HP.',
+        armorClass: 16,
         dexBonus: false,
         strengthRequirement: 15,
         stealthDisadvantage: true,
-        bonuses: { maxHealth: 30, defense: 3 }
+        bonuses: { defense: 3, maxHealth: 20 }
     }),
     createItem({
         id: 'shadow-leather',
@@ -396,10 +411,10 @@ export const ARMOR: Item[] = [
         rarity: ItemRarity.RARE,
         value: 800,
         weight: 8,
-        description: 'Armor that seems to absorb light.',
+        description: 'Armor that absorbs light. +3 Defense, +5% crit chance.',
         armorClass: 13,
         dexBonus: true,
-        bonuses: { speed: 10, critChance: 5 }
+        bonuses: { defense: 3, critChance: 5 }
     }),
     createItem({
         id: 'robes-of-the-archmagi',
@@ -408,13 +423,26 @@ export const ARMOR: Item[] = [
         rarity: ItemRarity.RARE,
         value: 1000,
         weight: 3,
-        description: 'Legendary robes worn by powerful mages.',
-        armorClass: 13,
+        description: 'Legendary robes worn by powerful mages. +3 Defense, +30 mana.',
+        armorClass: 12,
         dexBonus: true,
-        bonuses: { maxMana: 50, defense: 2, critMultiplier: 0.2 }
+        bonuses: { defense: 3, maxMana: 30 }
+    }),
+    createItem({
+        id: 'half-plate',
+        name: 'Half Plate +1',
+        type: ItemType.ARMOR,
+        rarity: ItemRarity.RARE,
+        value: 1000,
+        weight: 40,
+        description: 'Enchanted half plate armor. +3 Defense, +10 HP.',
+        armorClass: 15,
+        dexBonus: true,
+        maxDexBonus: 2,
+        bonuses: { defense: 3, maxHealth: 10 }
     }),
 
-    // === Legendary Armor ===
+    // === Legendary Armor (+5 defense, stat bonus, special ability) ===
     createItem({
         id: 'armor-of-invulnerability',
         name: 'Armor of Invulnerability',
@@ -422,11 +450,11 @@ export const ARMOR: Item[] = [
         rarity: ItemRarity.LEGENDARY,
         value: 15000,
         weight: 65,
-        description: 'Legendary armor that renders the wearer nearly invincible.',
-        armorClass: 20,
+        description: 'Legendary armor that renders the wearer nearly invincible. +5 Defense, +30 HP, grants Invulnerability.',
+        armorClass: 18,
         dexBonus: false,
         strengthRequirement: 15,
-        bonuses: { maxHealth: 50, defense: 10 },
+        bonuses: { defense: 5, maxHealth: 30 },
         grantedAbility: {
             id: 'invulnerability',
             name: 'Invulnerability',
@@ -437,6 +465,31 @@ export const ARMOR: Item[] = [
             targetType: 'self',
             invulnerable: true
         }
+    }),
+    createItem({
+        id: 'dragonscale-armor',
+        name: 'Dragonscale Armor',
+        type: ItemType.ARMOR,
+        rarity: ItemRarity.LEGENDARY,
+        value: 12000,
+        weight: 45,
+        description: 'Armor forged from dragon scales. +5 Defense, +25 HP, fire resistance.',
+        armorClass: 17,
+        dexBonus: true,
+        maxDexBonus: 2,
+        bonuses: { defense: 5, maxHealth: 25 }
+    }),
+    createItem({
+        id: 'robes-of-the-void',
+        name: 'Robes of the Void',
+        type: ItemType.ARMOR,
+        rarity: ItemRarity.LEGENDARY,
+        value: 10000,
+        weight: 3,
+        description: 'Robes woven from the fabric of the void. +5 Defense, +50 mana, +10% crit.',
+        armorClass: 13,
+        dexBonus: true,
+        bonuses: { defense: 5, maxMana: 50, critChance: 10 }
     })
 ];
 
